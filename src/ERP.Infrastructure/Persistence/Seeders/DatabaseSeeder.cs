@@ -28,6 +28,7 @@ public class DatabaseSeeder(
         await SeedRolesAndRolePermissionsAsync();
         await SeedAdminUserAsync();
         await SeedInventoryAsync();
+        await SeedFinanceBaselineAsync();
 
         logger.LogInformation("Database seeding completed successfully.");
     }
@@ -385,6 +386,94 @@ public class DatabaseSeeder(
                 logger.LogError("Failed to create admin user: {Errors}",
                     string.Join(", ", createResult.Errors.Select(e => e.Description)));
             }
+        }
+    }
+
+    private async Task SeedFinanceBaselineAsync()
+    {
+        // 1. Chart of Accounts (COA)
+        if (!await context.ChartOfAccounts.IgnoreQueryFilters().AnyAsync(c => c.CompanyId == DefaultCompanyId))
+        {
+            var coaList = new List<ERP.Domain.Entities.Finance.ChartOfAccount>
+            {
+                // Assets
+                ERP.Domain.Entities.Finance.ChartOfAccount.Create(DefaultCompanyId, "1-1000", "Aset Lancar (Current Assets)", ERP.Domain.Entities.Finance.AccountType.Asset, ERP.Domain.Entities.Finance.NormalBalance.DR, SystemUserId, null, true),
+                ERP.Domain.Entities.Finance.ChartOfAccount.Create(DefaultCompanyId, "1-1100", "Kas Operasional", ERP.Domain.Entities.Finance.AccountType.Asset, ERP.Domain.Entities.Finance.NormalBalance.DR, SystemUserId),
+                ERP.Domain.Entities.Finance.ChartOfAccount.Create(DefaultCompanyId, "1-1200", "Bank BCA Giro Operasional", ERP.Domain.Entities.Finance.AccountType.Asset, ERP.Domain.Entities.Finance.NormalBalance.DR, SystemUserId),
+                ERP.Domain.Entities.Finance.ChartOfAccount.Create(DefaultCompanyId, "1-1300", "Piutang Usaha (AR)", ERP.Domain.Entities.Finance.AccountType.Asset, ERP.Domain.Entities.Finance.NormalBalance.DR, SystemUserId),
+                ERP.Domain.Entities.Finance.ChartOfAccount.Create(DefaultCompanyId, "1-1400", "Persediaan Barang Dagang", ERP.Domain.Entities.Finance.AccountType.Asset, ERP.Domain.Entities.Finance.NormalBalance.DR, SystemUserId),
+                ERP.Domain.Entities.Finance.ChartOfAccount.Create(DefaultCompanyId, "1-1500", "PPN Masukan (Prepaid VAT)", ERP.Domain.Entities.Finance.AccountType.Asset, ERP.Domain.Entities.Finance.NormalBalance.DR, SystemUserId),
+
+                // Liabilities
+                ERP.Domain.Entities.Finance.ChartOfAccount.Create(DefaultCompanyId, "2-1000", "Kewajiban Lancar (Current Liabilities)", ERP.Domain.Entities.Finance.AccountType.Liability, ERP.Domain.Entities.Finance.NormalBalance.CR, SystemUserId, null, true),
+                ERP.Domain.Entities.Finance.ChartOfAccount.Create(DefaultCompanyId, "2-1100", "Hutang Usaha (AP)", ERP.Domain.Entities.Finance.AccountType.Liability, ERP.Domain.Entities.Finance.NormalBalance.CR, SystemUserId),
+                ERP.Domain.Entities.Finance.ChartOfAccount.Create(DefaultCompanyId, "2-1200", "Hutang Gaji & Upah Karyawan", ERP.Domain.Entities.Finance.AccountType.Liability, ERP.Domain.Entities.Finance.NormalBalance.CR, SystemUserId),
+                ERP.Domain.Entities.Finance.ChartOfAccount.Create(DefaultCompanyId, "2-1300", "PPN Keluaran (VAT Output)", ERP.Domain.Entities.Finance.AccountType.Liability, ERP.Domain.Entities.Finance.NormalBalance.CR, SystemUserId),
+
+                // Equity
+                ERP.Domain.Entities.Finance.ChartOfAccount.Create(DefaultCompanyId, "3-1000", "Modal Saham Disetor", ERP.Domain.Entities.Finance.AccountType.Equity, ERP.Domain.Entities.Finance.NormalBalance.CR, SystemUserId),
+                ERP.Domain.Entities.Finance.ChartOfAccount.Create(DefaultCompanyId, "3-2000", "Laba Ditahan (Retained Earnings)", ERP.Domain.Entities.Finance.AccountType.Equity, ERP.Domain.Entities.Finance.NormalBalance.CR, SystemUserId),
+
+                // Revenue
+                ERP.Domain.Entities.Finance.ChartOfAccount.Create(DefaultCompanyId, "4-1000", "Pendapatan Penjualan Produk", ERP.Domain.Entities.Finance.AccountType.Revenue, ERP.Domain.Entities.Finance.NormalBalance.CR, SystemUserId),
+                ERP.Domain.Entities.Finance.ChartOfAccount.Create(DefaultCompanyId, "4-2000", "Pendapatan Jasa & Servis", ERP.Domain.Entities.Finance.AccountType.Revenue, ERP.Domain.Entities.Finance.NormalBalance.CR, SystemUserId),
+
+                // Expense / COGS
+                ERP.Domain.Entities.Finance.ChartOfAccount.Create(DefaultCompanyId, "5-1000", "Beban Pokok Penjualan (HPP / COGS)", ERP.Domain.Entities.Finance.AccountType.Expense, ERP.Domain.Entities.Finance.NormalBalance.DR, SystemUserId),
+                ERP.Domain.Entities.Finance.ChartOfAccount.Create(DefaultCompanyId, "6-1000", "Beban Operasional & Administrasi", ERP.Domain.Entities.Finance.AccountType.Expense, ERP.Domain.Entities.Finance.NormalBalance.DR, SystemUserId, null, true),
+                ERP.Domain.Entities.Finance.ChartOfAccount.Create(DefaultCompanyId, "6-1100", "Beban Gaji, Tunjangan & Upah", ERP.Domain.Entities.Finance.AccountType.Expense, ERP.Domain.Entities.Finance.NormalBalance.DR, SystemUserId),
+                ERP.Domain.Entities.Finance.ChartOfAccount.Create(DefaultCompanyId, "6-1200", "Beban Utilitas, Listrik & Air", ERP.Domain.Entities.Finance.AccountType.Expense, ERP.Domain.Entities.Finance.NormalBalance.DR, SystemUserId),
+                ERP.Domain.Entities.Finance.ChartOfAccount.Create(DefaultCompanyId, "6-1300", "Beban Sewa & Pemeliharaan Kantor", ERP.Domain.Entities.Finance.AccountType.Expense, ERP.Domain.Entities.Finance.NormalBalance.DR, SystemUserId)
+            };
+
+            context.ChartOfAccounts.AddRange(coaList);
+            await context.SaveChangesAsync();
+
+            // 2. Default Cash & Bank Accounts
+            var kasAccount = coaList.First(c => c.AccountCode == "1-1100");
+            var bankAccount = coaList.First(c => c.AccountCode == "1-1200");
+
+            var kas = ERP.Domain.Entities.Finance.CashBankAccount.Create(
+                DefaultCompanyId,
+                DefaultBranchId,
+                kasAccount.Id,
+                "KAS-JKT",
+                "Kas Kecil Head Office",
+                null,
+                null,
+                SystemUserId);
+
+            var bank = ERP.Domain.Entities.Finance.CashBankAccount.Create(
+                DefaultCompanyId,
+                DefaultBranchId,
+                bankAccount.Id,
+                "BCA-001",
+                "BCA Giro Operasional Rupiah",
+                "Bank Central Asia",
+                "8830-192-881",
+                SystemUserId);
+
+            context.CashBankAccounts.AddRange(kas, bank);
+
+            // 3. Fiscal Periods for 2026
+            var currentYear = DateTime.UtcNow.Year;
+            for (int month = 1; month <= 12; month++)
+            {
+                var startDate = new DateOnly(currentYear, month, 1);
+                var endDate = startDate.AddMonths(1).AddDays(-1);
+
+                var period = ERP.Domain.Entities.Finance.FiscalPeriod.Create(
+                    DefaultCompanyId,
+                    currentYear,
+                    month,
+                    startDate,
+                    endDate);
+
+                context.FiscalPeriods.Add(period);
+            }
+
+            await context.SaveChangesAsync();
+            logger.LogInformation("Finance baseline (COA, CashBank, FiscalPeriods) seeded successfully.");
         }
     }
 }

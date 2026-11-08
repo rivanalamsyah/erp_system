@@ -1,0 +1,266 @@
+@page "/finance/chart-of-accounts"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject ISender Mediator
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject ICurrentUserService CurrentUser
+@inject IApplicationDbContext DbContext
+
+<PageTitle>Bagan Akun (Chart of Accounts) - Enterprise ERP</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-6 mb-8">
+    <div class="d-flex justify-space-between align-center mb-6">
+        <div>
+            <MudText Typo="Typo.h5" Class="fw-bold">Bagan Akun Standar (Chart of Accounts)</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Struktur klasifikasi buku besar perusahaan (Asset, Liability, Equity, Revenue, Expense)
+            </MudText>
+        </div>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="OpenCreateDialog">
+            Tambah Akun Baru
+        </MudButton>
+    </div>
+
+    <MudCard Elevation="2" Class="erp-card">
+        <MudCardContent>
+            <div class="d-flex gap-4 mb-4 align-center flex-wrap">
+                <MudSelect T="string" Label="Tipe Akun" Value="_selectedAccountType" ValueChanged="OnTypeChanged" Dense="true" Style="min-width: 180px;">
+                    <MudSelectItem Value="@("")">Semua Klasifikasi</MudSelectItem>
+                    <MudSelectItem Value="@("Asset")">Aset (Asset)</MudSelectItem>
+                    <MudSelectItem Value="@("Liability")">Kewajiban (Liability)</MudSelectItem>
+                    <MudSelectItem Value="@("Equity")">Ekuitas (Equity)</MudSelectItem>
+                    <MudSelectItem Value="@("Revenue")">Pendapatan (Revenue)</MudSelectItem>
+                    <MudSelectItem Value="@("Expense")">Beban (Expense)</MudSelectItem>
+                </MudSelect>
+
+                <MudTextField @bind-Value="_searchTerm"
+                              Placeholder="Cari kode akun atau nama akun..."
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              IconSize="Size.Medium"
+                              Class="mt-0"
+                              Immediate="true"
+                              OnKeyUp="OnSearchKeyUp" />
+
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="LoadData">
+                    Refresh
+                </MudButton>
+            </div>
+
+            <MudTable Items="@_accounts"
+                      Loading="@_loading"
+                      Hover="true"
+                      Striped="true"
+                      Dense="true"
+                      Elevation="0">
+                <HeaderContent>
+                    <MudTh>Kode Akun</MudTh>
+                    <MudTh>Nama Akun</MudTh>
+                    <MudTh>Klasifikasi</MudTh>
+                    <MudTh>Saldo Normal</MudTh>
+                    <MudTh>Tipe Header / Detail</MudTh>
+                    <MudTh>Status</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Kode Akun">
+                        <MudText Typo="Typo.body2" Class="@(context.IsHeader ? "fw-bold text-primary" : "font-monospace")">
+                            @context.AccountCode
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Nama Akun">
+                        <MudText Typo="Typo.body2" Class="@(context.IsHeader ? "fw-bold" : "ps-4")">
+                            @context.AccountName
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Klasifikasi">
+                        <MudChip T="string" Size="Size.Small" Color="@GetClassificationColor(context.AccountType)">
+                            @context.AccountType
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Saldo Normal">
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@(context.NormalBalance == "DR" ? Color.Info : Color.Success)">
+                            @context.NormalBalance
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Header / Detail">
+                        @(context.IsHeader ? "Header Akun" : "Akun Posting")
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Default)">
+                            @(context.IsActive ? "Aktif" : "Non-Aktif")
+                        </MudChip>
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Typo="Typo.body2" Align="Align.Center" Class="py-6">Belum ada akun terdaftar.</MudText>
+                </NoRecordsContent>
+            </MudTable>
+        </MudCardContent>
+    </MudCard>
+</MudContainer>
+
+@* Create Dialog *@
+<MudDialog @bind-Visible="_createOpen" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Tambah Akun Buku Besar (COA)</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_formAccountCode" Label="Kode Akun (cth: 1-1350)" Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_formAccountName" Label="Nama Akun" Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="AccountType" Label="Klasifikasi Akun" @bind-Value="_formAccountType">
+                    <MudSelectItem Value="@AccountType.Asset">Aset (Asset)</MudSelectItem>
+                    <MudSelectItem Value="@AccountType.Liability">Kewajiban (Liability)</MudSelectItem>
+                    <MudSelectItem Value="@AccountType.Equity">Ekuitas (Equity)</MudSelectItem>
+                    <MudSelectItem Value="@AccountType.Revenue">Pendapatan (Revenue)</MudSelectItem>
+                    <MudSelectItem Value="@AccountType.Expense">Beban (Expense)</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="NormalBalance" Label="Saldo Normal" @bind-Value="_formNormalBalance">
+                    <MudSelectItem Value="@NormalBalance.DR">Debit (DR)</MudSelectItem>
+                    <MudSelectItem Value="@NormalBalance.CR">Kredit (CR)</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudCheckBox T="bool" @bind-Value="_formIsHeader" Label="Tandai sebagai Akun Header (Akun Induk / Non-Posting)" Color="Color.Primary" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _createOpen = false)">Batal</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveCreate">Simpan Akun</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<ChartOfAccountDto> _accounts = [];
+    private bool _loading = true;
+    private string _selectedAccountType = string.Empty;
+    private string _searchTerm = string.Empty;
+
+    private bool _createOpen = false;
+    private string _formAccountCode = string.Empty;
+    private string _formAccountName = string.Empty;
+    private AccountType _formAccountType = AccountType.Asset;
+    private NormalBalance _formNormalBalance = NormalBalance.DR;
+    private bool _formIsHeader = false;
+
+    private readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Small, FullWidth = true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        try
+        {
+            var result = await Mediator.Send(new GetChartOfAccountsQuery(
+                AccountType: string.IsNullOrWhiteSpace(_selectedAccountType) ? null : _selectedAccountType,
+                SearchTerm: _searchTerm));
+
+            if (result.IsSuccess)
+            {
+                _accounts = result.Value.ToList();
+            }
+            else
+            {
+                Snackbar.Add(result.Error.Description, Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Gagal memuat COA: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnTypeChanged(string newType)
+    {
+        _selectedAccountType = newType;
+        await LoadData();
+    }
+
+    private async Task OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await LoadData();
+        }
+    }
+
+    private void OpenCreateDialog()
+    {
+        _formAccountCode = string.Empty;
+        _formAccountName = string.Empty;
+        _formAccountType = AccountType.Asset;
+        _formNormalBalance = NormalBalance.DR;
+        _formIsHeader = false;
+        _createOpen = true;
+    }
+
+    private async Task SaveCreate()
+    {
+        if (string.IsNullOrWhiteSpace(_formAccountCode) || string.IsNullOrWhiteSpace(_formAccountName))
+        {
+            Snackbar.Add("Mohon isi nomor kode akun dan nama akun.", Severity.Warning);
+            return;
+        }
+
+        var company = await DbContext.Companies.FirstOrDefaultAsync();
+        if (company == null)
+        {
+            Snackbar.Add("Master Company belum terkonfigurasi.", Severity.Error);
+            return;
+        }
+
+        var command = new CreateChartOfAccountCommand(
+            CompanyId: company.Id,
+            AccountCode: _formAccountCode,
+            AccountName: _formAccountName,
+            AccountType: _formAccountType,
+            NormalBalance: _formNormalBalance,
+            IsHeader: _formIsHeader
+        );
+
+        var result = await Mediator.Send(command);
+        if (result.IsSuccess)
+        {
+            Snackbar.Add($"Akun {_formAccountCode} berhasil dibuat.", Severity.Success);
+            _createOpen = false;
+            await LoadData();
+        }
+        else
+        {
+            Snackbar.Add(result.Error.Description, Severity.Error);
+        }
+    }
+
+    private Color GetClassificationColor(string type) => type switch
+    {
+        "Asset" => Color.Primary,
+        "Liability" => Color.Warning,
+        "Equity" => Color.Secondary,
+        "Revenue" => Color.Success,
+        "Expense" => Color.Error,
+        _ => Color.Default
+    };
+}

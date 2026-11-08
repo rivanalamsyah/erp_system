@@ -7,6 +7,7 @@ using ERP.Domain.Entities.Inventory;
 using ERP.Domain.Entities.Master;
 using ERP.Domain.Entities.Procurement;
 using ERP.Domain.Entities.Sales;
+using ERP.Domain.Entities.Finance;
 using ERP.Infrastructure.Identity.Models;
 using ERP.Infrastructure.Persistence.Interceptors;
 
@@ -55,6 +56,15 @@ public class ApplicationDbContext(
     public DbSet<Delivery> Deliveries => Set<Delivery>();
     public DbSet<DeliveryItem> DeliveryItems => Set<DeliveryItem>();
     public DbSet<SalesInvoice> SalesInvoices => Set<SalesInvoice>();
+
+    // Finance
+    public DbSet<ChartOfAccount> ChartOfAccounts => Set<ChartOfAccount>();
+    public DbSet<FiscalPeriod> FiscalPeriods => Set<FiscalPeriod>();
+    public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();
+    public DbSet<JournalLine> JournalLines => Set<JournalLine>();
+    public DbSet<CashBankAccount> CashBankAccounts => Set<CashBankAccount>();
+    public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<PaymentAllocation> PaymentAllocations => Set<PaymentAllocation>();
 
     // Identity Custom Tables
     public DbSet<Permission> Permissions => Set<Permission>();
@@ -535,7 +545,89 @@ public class ApplicationDbContext(
             b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
         });
 
-        // 6. Pemetaan Schema Audit
+        // 6. Pemetaan Schema Finance
+        builder.Entity<ChartOfAccount>(b =>
+        {
+            b.ToTable("chart_of_accounts", "finance");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => new { x.CompanyId, x.AccountCode }).IsUnique();
+            b.Property(x => x.AccountType).HasConversion<string>();
+            b.Property(x => x.NormalBalance).HasConversion<string>();
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.ParentAccount).WithMany(p => p.SubAccounts).HasForeignKey(x => x.ParentAccountId).OnDelete(DeleteBehavior.Restrict);
+            b.Property(x => x.Version).IsRowVersion();
+            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+        });
+
+        builder.Entity<FiscalPeriod>(b =>
+        {
+            b.ToTable("fiscal_periods", "finance");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => new { x.CompanyId, x.FiscalYear, x.PeriodNumber }).IsUnique();
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<JournalEntry>(b =>
+        {
+            b.ToTable("journal_entries", "finance");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => x.JournalNumber).IsUnique();
+            b.Property(x => x.Status).HasConversion<string>();
+            b.Property(x => x.TotalDebit).HasPrecision(18, 2);
+            b.Property(x => x.TotalCredit).HasPrecision(18, 2);
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
+            b.Property(x => x.Version).IsRowVersion();
+            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+        });
+
+        builder.Entity<JournalLine>(b =>
+        {
+            b.ToTable("journal_lines", "finance");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Debit).HasPrecision(18, 2);
+            b.Property(x => x.Credit).HasPrecision(18, 2);
+            b.HasOne(x => x.JournalEntry).WithMany(j => j.Lines).HasForeignKey(x => x.JournalEntryId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.Account).WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<CashBankAccount>(b =>
+        {
+            b.ToTable("cash_bank_accounts", "finance");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => new { x.CompanyId, x.Code }).IsUnique();
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Account).WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Restrict);
+            b.Property(x => x.Version).IsRowVersion();
+            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+        });
+
+        builder.Entity<Payment>(b =>
+        {
+            b.ToTable("payments", "finance");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => x.PaymentNumber).IsUnique();
+            b.Property(x => x.PaymentType).HasConversion<string>();
+            b.Property(x => x.PaymentMethod).HasConversion<string>();
+            b.Property(x => x.Status).HasConversion<string>();
+            b.Property(x => x.TotalAmount).HasPrecision(18, 2);
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.CashBankAccount).WithMany().HasForeignKey(x => x.CashBankAccountId).OnDelete(DeleteBehavior.Restrict);
+            b.Property(x => x.Version).IsRowVersion();
+            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+        });
+
+        builder.Entity<PaymentAllocation>(b =>
+        {
+            b.ToTable("payment_allocations", "finance");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.AllocatedAmount).HasPrecision(18, 2);
+            b.HasOne(x => x.Payment).WithMany(p => p.Allocations).HasForeignKey(x => x.PaymentId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // 7. Pemetaan Schema Audit
         builder.Entity<AuditLog>(b =>
         {
             b.ToTable("audit_logs", "audit");

@@ -46,6 +46,15 @@ public interface IApplicationDbContext
     DbSet<ERP.Domain.Entities.Sales.DeliveryItem> DeliveryItems { get; }
     DbSet<ERP.Domain.Entities.Sales.SalesInvoice> SalesInvoices { get; }
 
+    // Finance
+    DbSet<ERP.Domain.Entities.Finance.ChartOfAccount> ChartOfAccounts { get; }
+    DbSet<ERP.Domain.Entities.Finance.FiscalPeriod> FiscalPeriods { get; }
+    DbSet<ERP.Domain.Entities.Finance.JournalEntry> JournalEntries { get; }
+    DbSet<ERP.Domain.Entities.Finance.JournalLine> JournalLines { get; }
+    DbSet<ERP.Domain.Entities.Finance.CashBankAccount> CashBankAccounts { get; }
+    DbSet<ERP.Domain.Entities.Finance.Payment> Payments { get; }
+    DbSet<ERP.Domain.Entities.Finance.PaymentAllocation> PaymentAllocations { get; }
+
     // Audit
     DbSet<AuditLog> AuditLogs { get; }
 

@@ -1,0 +1,466 @@
+@page "/finance/payments"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject ISender Mediator
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject ICurrentUserService CurrentUser
+@inject IApplicationDbContext DbContext
+
+<PageTitle>Kas & Bank (Payments) - Enterprise ERP</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-6 mb-8">
+    <div class="d-flex justify-space-between align-center mb-6">
+        <div>
+            <MudText Typo="Typo.h5" Class="fw-bold">Kas & Bank / Transaksi Pembayaran</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Kelola penerimaan kas dari piutang pelanggan dan pengeluaran kas pembayaran hutang ke vendor
+            </MudText>
+        </div>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="OpenCreateDialog">
+            Catat Pembayaran Baru
+        </MudButton>
+    </div>
+
+    <MudCard Elevation="2" Class="erp-card">
+        <MudCardContent>
+            <div class="d-flex gap-4 mb-4 align-center flex-wrap">
+                <MudSelect T="string" Label="Tipe Transaksi" Value="_selectedPaymentType" ValueChanged="OnTypeChanged" Dense="true" Style="min-width: 220px;">
+                    <MudSelectItem Value="@("")">Semua Transaksi</MudSelectItem>
+                    <MudSelectItem Value="@("CustomerReceipt")">Penerimaan Pelanggan (AR)</MudSelectItem>
+                    <MudSelectItem Value="@("VendorPayment")">Pembayaran ke Pemasok (AP)</MudSelectItem>
+                </MudSelect>
+
+                <MudTextField @bind-Value="_searchTerm"
+                              Placeholder="Cari nomor bukti pembayaran..."
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              IconSize="Size.Medium"
+                              Class="mt-0"
+                              Immediate="true"
+                              OnKeyUp="OnSearchKeyUp" />
+
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="LoadData">
+                    Refresh
+                </MudButton>
+            </div>
+
+            <MudTable Items="@_payments"
+                      Loading="@_loading"
+                      Hover="true"
+                      Striped="true"
+                      Dense="true"
+                      Elevation="0">
+                <HeaderContent>
+                    <MudTh>No. Bukti</MudTh>
+                    <MudTh>Tgl Bayar</MudTh>
+                    <MudTh>Jenis</MudTh>
+                    <MudTh>Pihak Terkait (Partner)</MudTh>
+                    <MudTh>Akun Kas/Bank</MudTh>
+                    <MudTh>Metode Bayar</MudTh>
+                    <MudTh Style="text-align: right;">Total Nominal</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh Style="text-align: right;">Aksi</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="No. Bukti">
+                        <MudText Typo="Typo.body2" Class="fw-bold text-primary">@context.PaymentNumber</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Tgl Bayar">@context.PaymentDate.ToString("dd/MM/yyyy")</MudTd>
+                    <MudTd DataLabel="Jenis">
+                        <MudChip T="string" Size="Size.Small" Color="@(context.PaymentType == "CustomerReceipt" ? Color.Success : Color.Info)">
+                            @(context.PaymentType == "CustomerReceipt" ? "Masuk (AR)" : "Keluar (AP)")
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Partner">@context.PartnerName</MudTd>
+                    <MudTd DataLabel="Akun Kas/Bank">@context.CashBankAccountName</MudTd>
+                    <MudTd DataLabel="Metode Bayar">@context.PaymentMethod</MudTd>
+                    <MudTd DataLabel="Total Nominal" Style="text-align: right;">
+                        <MudText Typo="Typo.body2" Class="fw-bold">
+                            Rp @context.TotalAmount.ToString("N0")
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Color="@(context.Status == "Posted" ? Color.Success : Color.Warning)">
+                            @context.Status
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Aksi" Style="text-align: right;">
+                        @if (context.Status == "Draft")
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.CheckCircle"
+                                           Size="Size.Small"
+                                           Color="Color.Success"
+                                           OnClick="@(() => PostPayment(context))" />
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Typo="Typo.body2" Align="Align.Center" Class="py-6">Belum ada transaksi pembayaran.</MudText>
+                </NoRecordsContent>
+            </MudTable>
+
+            <div class="d-flex justify-end mt-4">
+                <MudPagination Count="@_totalPages"
+                               Selected="@_currentPage"
+                               SelectedChanged="OnPageChanged"
+                               Color="Color.Primary" />
+            </div>
+        </MudCardContent>
+    </MudCard>
+</MudContainer>
+
+@* Create Dialog *@
+<MudDialog @bind-Visible="_createOpen" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Pencatatan Transaksi Kas / Bank</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="PaymentType" Label="Jenis Pembayaran" Value="_formPaymentType" ValueChanged="OnPaymentTypeSelected">
+                    <MudSelectItem Value="@PaymentType.CustomerReceipt">Penerimaan dari Pelanggan (Customer Receipt)</MudSelectItem>
+                    <MudSelectItem Value="@PaymentType.VendorPayment">Pembayaran ke Pemasok (Vendor Payment)</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="Guid" Label="@(_formPaymentType == PaymentType.CustomerReceipt ? "Pilih Pelanggan" : "Pilih Pemasok")" Value="_formPartnerId" ValueChanged="OnPartnerSelected" Required="true">
+                    @if (_formPaymentType == PaymentType.CustomerReceipt)
+                    {
+                        @foreach (var c in _availableCustomers)
+                        {
+                            <MudSelectItem Value="@c.Id">@c.Name (@c.Code)</MudSelectItem>
+                        }
+                    }
+                    else
+                    {
+                        @foreach (var s in _availableSuppliers)
+                        {
+                            <MudSelectItem Value="@s.Id">@s.Name (@s.Code)</MudSelectItem>
+                        }
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="Guid" Label="Akun Rekening Kas/Bank" @bind-Value="_formCashBankAccountId" Required="true">
+                    @foreach (var a in _availableCashBankAccounts)
+                    {
+                        <MudSelectItem Value="@a.Id">@a.Name (@a.Code)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="PaymentMethod" Label="Metode Pembayaran" @bind-Value="_formPaymentMethod">
+                    <MudSelectItem Value="@PaymentMethod.BankTransfer">Transfer Bank</MudSelectItem>
+                    <MudSelectItem Value="@PaymentMethod.Cash">Kas Tunai</MudSelectItem>
+                    <MudSelectItem Value="@PaymentMethod.Giro">Giro Bilyet</MudSelectItem>
+                    <MudSelectItem Value="@PaymentMethod.Cheque">Cek Bank</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker Label="Tanggal Pembayaran" @bind-Date="_formPaymentDate" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudNumericField T="decimal" Label="Total Nominal Pembayaran (Rp)" @bind-Value="_formTotalAmount" Min="0.01m" Required="true" />
+            </MudItem>
+
+            @if (_openInvoices.Count > 0)
+            {
+                <MudItem xs="12">
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.subtitle2" Class="fw-bold mb-2">Alokasikan ke Tagihan / Faktur Terbuka:</MudText>
+                    <MudTable Items="@_openInvoices" Dense="true" Elevation="0">
+                        <HeaderContent>
+                            <MudTh>Nomor Dokumen</MudTh>
+                            <MudTh Style="text-align: right;">Sisa Tagihan</MudTh>
+                            <MudTh Style="text-align: right;">Alokasi Pembayaran</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>@context.DocNumber</MudTd>
+                            <MudTd Style="text-align: right;">Rp @context.RemainingAmount.ToString("N0")</MudTd>
+                            <MudTd Style="text-align: right; width: 160px;">
+                                <MudNumericField T="decimal" @bind-Value="context.AllocatedAmount" Min="0" Max="@context.RemainingAmount" />
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudItem>
+            }
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _createOpen = false)">Batal</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveCreate">Simpan Pembayaran</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<PaymentDto> _payments = [];
+    private bool _loading = true;
+    private string _selectedPaymentType = string.Empty;
+    private string _searchTerm = string.Empty;
+    private int _currentPage = 1;
+    private int _pageSize = 10;
+    private int _totalPages = 1;
+
+    private bool _createOpen = false;
+    private PaymentType _formPaymentType = PaymentType.CustomerReceipt;
+    private Guid _formPartnerId;
+    private Guid _formCashBankAccountId;
+    private PaymentMethod _formPaymentMethod = PaymentMethod.BankTransfer;
+    private DateTime? _formPaymentDate = DateTime.Today;
+    private decimal _formTotalAmount;
+
+    private List<CustomerLookup> _availableCustomers = [];
+    private List<SupplierLookup> _availableSuppliers = [];
+    private List<CashBankLookup> _availableCashBankAccounts = [];
+    private List<InvoiceAllocationModel> _openInvoices = [];
+
+    private readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
+
+    public class InvoiceAllocationModel
+    {
+        public Guid InvoiceId { get; set; }
+        public string DocNumber { get; set; } = string.Empty;
+        public decimal RemainingAmount { get; set; }
+        public decimal AllocatedAmount { get; set; }
+    }
+
+    public record CustomerLookup(Guid Id, string Code, string Name);
+    public record SupplierLookup(Guid Id, string Code, string Name);
+    public record CashBankLookup(Guid Id, string Code, string Name);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLookups();
+        await LoadData();
+    }
+
+    private async Task LoadLookups()
+    {
+        _availableCustomers = await DbContext.Customers
+            .AsNoTracking()
+            .Where(c => c.IsActive)
+            .OrderBy(c => c.Name)
+            .Select(c => new CustomerLookup(c.Id, c.Code, c.Name))
+            .ToListAsync();
+
+        _availableSuppliers = await DbContext.Suppliers
+            .AsNoTracking()
+            .Where(s => s.IsActive)
+            .OrderBy(s => s.Name)
+            .Select(s => new SupplierLookup(s.Id, s.Code, s.Name))
+            .ToListAsync();
+
+        _availableCashBankAccounts = await DbContext.CashBankAccounts
+            .AsNoTracking()
+            .Where(a => a.IsActive)
+            .OrderBy(a => a.Name)
+            .Select(a => new CashBankLookup(a.Id, a.Code, a.Name))
+            .ToListAsync();
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        try
+        {
+            var result = await Mediator.Send(new GetPaymentsQuery(
+                PaymentType: string.IsNullOrWhiteSpace(_selectedPaymentType) ? null : _selectedPaymentType,
+                SearchTerm: _searchTerm,
+                PageNumber: _currentPage,
+                PageSize: _pageSize));
+
+            if (result.IsSuccess)
+            {
+                _payments = result.Value.Items.ToList();
+                _totalPages = (int)Math.Ceiling((double)result.Value.TotalCount / _pageSize);
+            }
+            else
+            {
+                Snackbar.Add(result.Error.Description, Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Gagal memuat pembayaran: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnTypeChanged(string newType)
+    {
+        _selectedPaymentType = newType;
+        _currentPage = 1;
+        await LoadData();
+    }
+
+    private async Task OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _currentPage = 1;
+            await LoadData();
+        }
+    }
+
+    private async Task OnPageChanged(int page)
+    {
+        _currentPage = page;
+        await LoadData();
+    }
+
+    private void OpenCreateDialog()
+    {
+        _formPaymentType = PaymentType.CustomerReceipt;
+        _formPartnerId = _availableCustomers.FirstOrDefault()?.Id ?? Guid.Empty;
+        _formCashBankAccountId = _availableCashBankAccounts.FirstOrDefault()?.Id ?? Guid.Empty;
+        _formPaymentMethod = PaymentMethod.BankTransfer;
+        _formPaymentDate = DateTime.Today;
+        _formTotalAmount = 0;
+        _openInvoices.Clear();
+
+        if (_formPartnerId != Guid.Empty)
+        {
+            _ = OnPartnerSelected(_formPartnerId);
+        }
+
+        _createOpen = true;
+    }
+
+    private async Task OnPaymentTypeSelected(PaymentType type)
+    {
+        _formPaymentType = type;
+        _openInvoices.Clear();
+
+        if (type == PaymentType.CustomerReceipt)
+        {
+            _formPartnerId = _availableCustomers.FirstOrDefault()?.Id ?? Guid.Empty;
+        }
+        else
+        {
+            _formPartnerId = _availableSuppliers.FirstOrDefault()?.Id ?? Guid.Empty;
+        }
+
+        if (_formPartnerId != Guid.Empty)
+        {
+            await OnPartnerSelected(_formPartnerId);
+        }
+    }
+
+    private async Task OnPartnerSelected(Guid partnerId)
+    {
+        _formPartnerId = partnerId;
+        _openInvoices.Clear();
+
+        if (partnerId == Guid.Empty) return;
+
+        if (_formPaymentType == PaymentType.CustomerReceipt)
+        {
+            var invoices = await DbContext.SalesInvoices
+                .AsNoTracking()
+                .Where(i => i.CustomerId == partnerId && i.Status == SalesInvoiceStatus.Posted && (i.TotalAmount - i.PaidAmount) > 0)
+                .OrderBy(i => i.DueDate)
+                .ToListAsync();
+
+            _openInvoices = invoices.Select(i => new InvoiceAllocationModel
+            {
+                InvoiceId = i.Id,
+                DocNumber = i.InvoiceNumber,
+                RemainingAmount = i.RemainingAmount,
+                AllocatedAmount = 0
+            }).ToList();
+        }
+        else
+        {
+            var bills = await DbContext.VendorBills
+                .AsNoTracking()
+                .Where(b => b.SupplierId == partnerId && b.Status == VendorBillStatus.Posted && (b.TotalAmount - b.PaidAmount) > 0)
+                .OrderBy(b => b.DueDate)
+                .ToListAsync();
+
+            _openInvoices = bills.Select(b => new InvoiceAllocationModel
+            {
+                InvoiceId = b.Id,
+                DocNumber = b.BillNumber,
+                RemainingAmount = b.RemainingAmount,
+                AllocatedAmount = 0
+            }).ToList();
+        }
+    }
+
+    private async Task SaveCreate()
+    {
+        if (_formPartnerId == Guid.Empty || _formCashBankAccountId == Guid.Empty || _formTotalAmount <= 0)
+        {
+            Snackbar.Add("Mohon lengkapi data partner, rekening kas/bank, dan total nominal pembayaran.", Severity.Warning);
+            return;
+        }
+
+        var allocations = _openInvoices.Where(i => i.AllocatedAmount > 0).ToList();
+
+        var company = await DbContext.Companies.FirstOrDefaultAsync();
+        var branch = await DbContext.Branches.FirstOrDefaultAsync();
+
+        if (company == null || branch == null)
+        {
+            Snackbar.Add("Master Company / Branch belum terkonfigurasi.", Severity.Error);
+            return;
+        }
+
+        var command = new CreatePaymentCommand(
+            CompanyId: company.Id,
+            BranchId: branch.Id,
+            CashBankAccountId: _formCashBankAccountId,
+            PaymentDate: DateOnly.FromDateTime(_formPaymentDate ?? DateTime.Today),
+            PaymentType: _formPaymentType,
+            PartnerId: _formPartnerId,
+            PaymentMethod: _formPaymentMethod,
+            TotalAmount: _formTotalAmount,
+            Allocations: allocations.Select(a => new PaymentAllocationInput(a.InvoiceId, a.AllocatedAmount)).ToList()
+        );
+
+        var result = await Mediator.Send(command);
+        if (result.IsSuccess)
+        {
+            Snackbar.Add("Transaksi pembayaran berhasil dicatat.", Severity.Success);
+            _createOpen = false;
+            await LoadData();
+        }
+        else
+        {
+            Snackbar.Add(result.Error.Description, Severity.Error);
+        }
+    }
+
+    private async Task PostPayment(PaymentDto payment)
+    {
+        var confirm = await DialogService.ShowMessageBoxAsync(
+            "Konfirmasi Posting Pembayaran",
+            $"Posting pembayaran {payment.PaymentNumber} senilai Rp {payment.TotalAmount:N0}? Saldo rekening kas/bank akan dipotong/ditambah dan sisa piutang/hutang akan diperbarui.",
+            yesText: "Posting Pembayaran",
+            cancelText: "Batal");
+
+        if (confirm == true)
+        {
+            var result = await Mediator.Send(new PostPaymentCommand(payment.Id));
+            if (result.IsSuccess)
+            {
+                Snackbar.Add($"Pembayaran {payment.PaymentNumber} berhasil diposting.", Severity.Success);
+                await LoadData();
+            }
+            else
+            {
+                Snackbar.Add(result.Error.Description, Severity.Error);
+            }
+        }
+    }
+}
