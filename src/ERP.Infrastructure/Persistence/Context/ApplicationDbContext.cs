@@ -8,6 +8,7 @@ using ERP.Domain.Entities.Master;
 using ERP.Domain.Entities.Procurement;
 using ERP.Domain.Entities.Sales;
 using ERP.Domain.Entities.Finance;
+using ERP.Domain.Entities.Hr;
 using ERP.Infrastructure.Identity.Models;
 using ERP.Infrastructure.Persistence.Interceptors;
 
@@ -65,6 +66,14 @@ public class ApplicationDbContext(
     public DbSet<CashBankAccount> CashBankAccounts => Set<CashBankAccount>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<PaymentAllocation> PaymentAllocations => Set<PaymentAllocation>();
+
+    // HR
+    public DbSet<Employee> Employees => Set<Employee>();
+    public DbSet<AttendanceRecord> AttendanceRecords => Set<AttendanceRecord>();
+    public DbSet<LeaveType> LeaveTypes => Set<LeaveType>();
+    public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
+    public DbSet<PayrollPeriod> PayrollPeriods => Set<PayrollPeriod>();
+    public DbSet<PayrollItem> PayrollItems => Set<PayrollItem>();
 
     // Identity Custom Tables
     public DbSet<Permission> Permissions => Set<Permission>();
@@ -627,7 +636,73 @@ public class ApplicationDbContext(
             b.HasOne(x => x.Payment).WithMany(p => p.Allocations).HasForeignKey(x => x.PaymentId).OnDelete(DeleteBehavior.Cascade);
         });
 
-        // 7. Pemetaan Schema Audit
+        // 7. Pemetaan Schema HR
+        builder.Entity<Employee>(b =>
+        {
+            b.ToTable("employees", "hr");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => new { x.CompanyId, x.EmployeeNumber }).IsUnique();
+            b.Property(x => x.EmploymentStatus).HasConversion<string>();
+            b.Property(x => x.BasicSalary).HasPrecision(18, 2);
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Department).WithMany().HasForeignKey(x => x.DepartmentId).OnDelete(DeleteBehavior.Restrict);
+            b.Property(x => x.Version).IsRowVersion();
+            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+        });
+
+        builder.Entity<AttendanceRecord>(b =>
+        {
+            b.ToTable("attendance_records", "hr");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => new { x.EmployeeId, x.AttendanceDate }).IsUnique();
+            b.Property(x => x.Status).HasConversion<string>();
+            b.HasOne(x => x.Employee).WithMany().HasForeignKey(x => x.EmployeeId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<LeaveType>(b =>
+        {
+            b.ToTable("leave_types", "hr");
+            b.HasKey(x => x.Id);
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.Property(x => x.Version).IsRowVersion();
+            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+        });
+
+        builder.Entity<LeaveRequest>(b =>
+        {
+            b.ToTable("leave_requests", "hr");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Status).HasConversion<string>();
+            b.HasOne(x => x.Employee).WithMany().HasForeignKey(x => x.EmployeeId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.LeaveType).WithMany().HasForeignKey(x => x.LeaveTypeId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<PayrollPeriod>(b =>
+        {
+            b.ToTable("payroll_periods", "hr");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Status).HasConversion<string>();
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.Property(x => x.Version).IsRowVersion();
+            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+        });
+
+        builder.Entity<PayrollItem>(b =>
+        {
+            b.ToTable("payroll_items", "hr");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => new { x.PeriodId, x.EmployeeId }).IsUnique();
+            b.Property(x => x.BasicSalary).HasPrecision(18, 2);
+            b.Property(x => x.Allowances).HasPrecision(18, 2);
+            b.Property(x => x.Deductions).HasPrecision(18, 2);
+            b.Property(x => x.IncomeTaxPph21).HasPrecision(18, 2);
+            b.Property(x => x.NetSalary).HasPrecision(18, 2);
+            b.HasOne(x => x.Period).WithMany(p => p.Items).HasForeignKey(x => x.PeriodId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.Employee).WithMany().HasForeignKey(x => x.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // 8. Pemetaan Schema Audit
         builder.Entity<AuditLog>(b =>
         {
             b.ToTable("audit_logs", "audit");

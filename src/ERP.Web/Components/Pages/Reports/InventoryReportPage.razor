@@ -1,0 +1,153 @@
+@page "/reports/inventory"
+@attribute [Authorize(Policy = Permissions.Reports.FinancialView)]
+@inject ISender Sender
+@inject ISnackbar Snackbar
+@inject IApplicationDbContext DbContext
+
+<PageTitle>Laporan Valuasi Persediaan - Enterprise ERP</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="my-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <div>
+            <MudText Typo="Typo.h5" Color="Color.Primary" Class="fw-bold">Laporan Valuasi Persediaan (Inventory Valuation)</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Monitoring total nilai aset persediaan gudang berdasarkan harga perolehan (Moving Average / Cost).</MudText>
+        </div>
+        <div class="d-flex gap-2">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadData">
+                Segarkan
+            </MudButton>
+        </div>
+    </div>
+
+    <!-- FILTER & SEARCH BAR -->
+    <MudCard Elevation="2" Class="mb-4">
+        <MudCardContent>
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="Guid?" Value="_selectedWarehouseId" ValueChanged="OnWarehouseChanged" Label="Filter Gudang" Clearable="true">
+                        <MudSelectItem T="Guid?" Value="@((Guid?)null)">Semua Gudang</MudSelectItem>
+                        @foreach (var wh in _warehouses)
+                        {
+                            <MudSelectItem T="Guid?" Value="@((Guid?)wh.Id)">@wh.Name (@wh.Code)</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6" Class="d-flex align-center">
+                    <MudTextField @bind-Value="_searchProduct" Placeholder="Cari SKU atau nama barang..." Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" />
+                </MudItem>
+            </MudGrid>
+        </MudCardContent>
+    </MudCard>
+
+    @if (_loading)
+    {
+        <div class="d-flex justify-center my-8"><MudProgressCircular Color="Color.Primary" Indeterminate="true" /></div>
+    }
+    else if (_data != null)
+    {
+        <!-- KPI METRICS -->
+        <MudGrid Class="mb-4">
+            <MudItem xs="12" sm="4">
+                <MudCard Elevation="2" Class="pa-4 bg-primary text-white">
+                    <MudText Typo="Typo.caption">TOTAL VALUASI NILAI BUKU GUDANG</MudText>
+                    <MudText Typo="Typo.h4" Class="fw-bold">Rp @_data.GrandTotalValuation.ToString("N0")</MudText>
+                    <MudText Typo="Typo.body2">Aset Lancar Persediaan</MudText>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudCard Elevation="2" Class="pa-4 bg-info text-white">
+                    <MudText Typo="Typo.caption">TOTAL FISIK UNIT STOK</MudText>
+                    <MudText Typo="Typo.h4" Class="fw-bold">@_data.GrandTotalQuantity.ToString("N0")</MudText>
+                    <MudText Typo="Typo.body2">Kuantitas di Seluruh Gudang</MudText>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudCard Elevation="2" Class="pa-4 bg-success text-white">
+                    <MudText Typo="Typo.caption">TOTAL VARIAN SKU AKTIF</MudText>
+                    <MudText Typo="Typo.h4" Class="fw-bold">@_data.TotalItemCount SKU</MudText>
+                    <MudText Typo="Typo.body2">Item Terdaftar di Saldo Stok</MudText>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+
+        <!-- TABLE OF VALUATION ITEMS -->
+        <MudTable Items="FilteredItems" Hover="true" Striped="true" Elevation="2">
+            <HeaderContent>
+                <MudTh>Gudang</MudTh>
+                <MudTh>SKU</MudTh>
+                <MudTh>Nama Barang</MudTh>
+                <MudTh>Satuan</MudTh>
+                <MudTh Style="text-align: right;">Stok Fisik</MudTh>
+                <MudTh Style="text-align: right;">Stok Dipesan</MudTh>
+                <MudTh Style="text-align: right;">Stok Tersedia</MudTh>
+                <MudTh Style="text-align: right;">Harga Pokok (HPP)</MudTh>
+                <MudTh Style="text-align: right;">Total Nilai Valuasi</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Gudang"><strong>@context.WarehouseName</strong></MudTd>
+                <MudTd DataLabel="SKU">@context.ProductCode</MudTd>
+                <MudTd DataLabel="Nama Barang">@context.ProductName</MudTd>
+                <MudTd DataLabel="Satuan"><MudChip T="string" Size="Size.Small">@context.UomName</MudChip></MudTd>
+                <MudTd DataLabel="Stok Fisik" Style="text-align: right;">@context.PhysicalQuantity.ToString("N0")</MudTd>
+                <MudTd DataLabel="Stok Dipesan" Style="text-align: right;" Class="text-warning">@context.ReservedQuantity.ToString("N0")</MudTd>
+                <MudTd DataLabel="Stok Tersedia" Style="text-align: right;" Class="text-success fw-bold">@context.AvailableQuantity.ToString("N0")</MudTd>
+                <MudTd DataLabel="Harga Pokok" Style="text-align: right;">Rp @context.UnitCost.ToString("N0")</MudTd>
+                <MudTd DataLabel="Total Nilai Valuasi" Style="text-align: right;" Class="fw-bold text-primary">
+                    Rp @context.TotalValuation.ToString("N0")
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Align="Align.Center" Class="pa-4">Tidak ada data persediaan barang yang sesuai.</MudText>
+            </NoRecordsContent>
+        </MudTable>
+    }
+</MudContainer>
+
+@code {
+    private List<Warehouse> _warehouses = [];
+    private Guid? _selectedWarehouseId;
+    private string? _searchProduct;
+    private bool _loading = true;
+    private InventoryValuationDto? _data;
+
+    private IEnumerable<StockValuationItemDto> FilteredItems
+    {
+        get
+        {
+            if (_data == null) return Enumerable.Empty<StockValuationItemDto>();
+            if (string.IsNullOrWhiteSpace(_searchProduct)) return _data.Items;
+
+            var term = _searchProduct.Trim().ToLowerInvariant();
+            return _data.Items.Where(i => i.ProductName.ToLowerInvariant().Contains(term) ||
+                                          i.ProductCode.ToLowerInvariant().Contains(term));
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _warehouses = await DbContext.Warehouses.OrderBy(w => w.Name).ToListAsync();
+        await LoadData();
+    }
+
+    private async Task OnWarehouseChanged(Guid? value)
+    {
+        _selectedWarehouseId = value;
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        var result = await Sender.Send(new GetInventoryValuationQuery(_selectedWarehouseId));
+        if (result.IsSuccess)
+        {
+            _data = result.Value;
+        }
+        else
+        {
+            Snackbar.Add(result.Error.Message, Severity.Error);
+        }
+        _loading = false;
+    }
+}

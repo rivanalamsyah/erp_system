@@ -1,0 +1,293 @@
+@page "/hr/payroll"
+@attribute [Authorize(Policy = Permissions.Hr.PayrollProcess)]
+@inject ISender Sender
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IApplicationDbContext DbContext
+
+<PageTitle>Penggajian & Payroll - Enterprise ERP</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="my-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <div>
+            <MudText Typo="Typo.h5" Color="Color.Primary" Class="fw-bold">Penggajian & Payroll (HR)</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Kalkulasi batch gaji bulanan, PPh 21, tunjangan, dan disbursement (BR-HR-002).</MudText>
+        </div>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AddCard" OnClick="OpenCreateDialog">
+            Buat Periode Payroll
+        </MudButton>
+    </div>
+
+    <MudTable Items="_periods" Hover="true" Striped="true" Loading="_loading" Elevation="2">
+        <HeaderContent>
+            <MudTh>Nama Periode</MudTh>
+            <MudTh>Tgl Mulai</MudTh>
+            <MudTh>Tgl Selesai</MudTh>
+            <MudTh Style="text-align: center;">Jumlah Karyawan</MudTh>
+            <MudTh Style="text-align: right;">Total Gaji Pokok</MudTh>
+            <MudTh Style="text-align: right;">Total Tunjangan</MudTh>
+            <MudTh Style="text-align: right;">Total Potongan & Pajak</MudTh>
+            <MudTh Style="text-align: right;">Total Take Home Pay</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh Style="text-align: center;">Aksi</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Nama Periode"><strong>@context.PeriodName</strong></MudTd>
+            <MudTd DataLabel="Tgl Mulai">@context.StartDate.ToString("dd/MM/yyyy")</MudTd>
+            <MudTd DataLabel="Tgl Selesai">@context.EndDate.ToString("dd/MM/yyyy")</MudTd>
+            <MudTd DataLabel="Jumlah Karyawan" Style="text-align: center;">@context.EmployeeCount Org</MudTd>
+            <MudTd DataLabel="Total Gaji Pokok" Style="text-align: right;">Rp @context.TotalBasicSalary.ToString("N0")</MudTd>
+            <MudTd DataLabel="Total Tunjangan" Style="text-align: right;">Rp @context.TotalAllowances.ToString("N0")</MudTd>
+            <MudTd DataLabel="Total Potongan & Pajak" Style="text-align: right;">Rp @((context.TotalDeductions + context.TotalTax).ToString("N0"))</MudTd>
+            <MudTd DataLabel="Total Take Home Pay" Style="text-align: right;" Class="fw-bold text-success">
+                Rp @context.TotalNetSalary.ToString("N0")
+            </MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
+                    @context.Status
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Aksi" Style="text-align: center;">
+                <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
+                    @if (context.Status == PayrollStatus.Draft)
+                    {
+                        <MudButton Color="Color.Info" StartIcon="@Icons.Material.Filled.Calculate" OnClick="() => CalculatePayroll(context.Id)">Hitung</MudButton>
+                        @if (context.Items.Count > 0)
+                        {
+                            <MudButton Color="Color.Success" StartIcon="@Icons.Material.Filled.CheckCircle" OnClick="() => ApprovePayroll(context.Id)">Setujui</MudButton>
+                        }
+                    }
+                    else if (context.Status == PayrollStatus.Approved)
+                    {
+                        <MudButton Color="Color.Warning" StartIcon="@Icons.Material.Filled.Payments" OnClick="() => PayPayroll(context.Id)">Bayar</MudButton>
+                    }
+                    <MudButton Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Visibility" OnClick="() => ShowDetails(context)">Detail</MudButton>
+                </MudButtonGroup>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Align="Align.Center" Class="my-4">Belum ada periode penggajian yang dibuat.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudContainer>
+
+<MudDialog @bind-Visible="_createDialogOpen" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Buat Periode Penggajian Baru</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_newPeriodName" Label="Nama Periode (Contoh: Gaji November 2026)" Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_newStartDate" Label="Tanggal Awal Periode" Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_newEndDate" Label="Tanggal Akhir Periode" Required="true" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _createDialogOpen = false">Batal</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="CreatePeriod" Disabled="_saving">
+            @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+            Buat Periode
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+<MudDialog @bind-Visible="_detailsDialogOpen" Options="_detailsDialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Rincian Slip Gaji Periode: @(_selectedPeriod?.PeriodName)</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_selectedPeriod != null)
+        {
+            <MudTable Items="_selectedPeriod.Items" Hover="true" Dense="true" Elevation="0">
+                <HeaderContent>
+                    <MudTh>NIK</MudTh>
+                    <MudTh>Nama Karyawan</MudTh>
+                    <MudTh>Departemen</MudTh>
+                    <MudTh Style="text-align: right;">Gaji Pokok</MudTh>
+                    <MudTh Style="text-align: right;">Tunjangan</MudTh>
+                    <MudTh Style="text-align: right;">Potongan BPJS</MudTh>
+                    <MudTh Style="text-align: right;">PPh 21</MudTh>
+                    <MudTh Style="text-align: right;">Gaji Bersih (THP)</MudTh>
+                    <MudTh>Status Bayar</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.EmployeeNumber</MudTd>
+                    <MudTd>@context.EmployeeFullName</MudTd>
+                    <MudTd>@context.DepartmentName</MudTd>
+                    <MudTd Style="text-align: right;">Rp @context.BasicSalary.ToString("N0")</MudTd>
+                    <MudTd Style="text-align: right;">Rp @context.Allowances.ToString("N0")</MudTd>
+                    <MudTd Style="text-align: right;">Rp @context.Deductions.ToString("N0")</MudTd>
+                    <MudTd Style="text-align: right;">Rp @context.IncomeTaxPph21.ToString("N0")</MudTd>
+                    <MudTd Style="text-align: right;" Class="fw-bold">Rp @context.NetSalary.ToString("N0")</MudTd>
+                    <MudTd>
+                        @if (context.IsPaid)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success">Lunas</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Default">Pending</MudChip>
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" OnClick="() => _detailsDialogOpen = false">Tutup</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<PayrollPeriodDto> _periods = [];
+    private Guid _companyId;
+    private bool _loading = true;
+    private bool _saving = false;
+
+    private bool _createDialogOpen;
+    private DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Small, FullWidth = true };
+
+    private bool _detailsDialogOpen;
+    private DialogOptions _detailsDialogOptions = new() { MaxWidth = MaxWidth.Large, FullWidth = true };
+    private PayrollPeriodDto? _selectedPeriod;
+
+    private string _newPeriodName = $"Payroll {DateTime.Today:MMMM yyyy}";
+    private DateTime? _newStartDate = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime? _newEndDate = new DateTime(DateTime.Today.Year, DateTime.Today.Month, DateTime.DaysInMonth(DateTime.Today.Year, DateTime.Today.Month));
+
+    protected override async Task OnInitializedAsync()
+    {
+        var comp = await DbContext.Companies.FirstOrDefaultAsync();
+        if (comp != null) _companyId = comp.Id;
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        var result = await Sender.Send(new GetPayrollPeriodsQuery(_companyId));
+        if (result.IsSuccess)
+        {
+            _periods = result.Value;
+        }
+        else
+        {
+            Snackbar.Add(result.Error.Message, Severity.Error);
+        }
+        _loading = false;
+    }
+
+    private void OpenCreateDialog()
+    {
+        _newPeriodName = $"Payroll {DateTime.Today:MMMM yyyy}";
+        _newStartDate = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+        _newEndDate = new DateTime(DateTime.Today.Year, DateTime.Today.Month, DateTime.DaysInMonth(DateTime.Today.Year, DateTime.Today.Month));
+        _createDialogOpen = true;
+    }
+
+    private async Task CreatePeriod()
+    {
+        if (string.IsNullOrWhiteSpace(_newPeriodName))
+        {
+            Snackbar.Add("Nama periode wajib diisi.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        var start = DateOnly.FromDateTime(_newStartDate ?? DateTime.Today);
+        var end = DateOnly.FromDateTime(_newEndDate ?? DateTime.Today);
+
+        var cmd = new CreatePayrollPeriodCommand(_companyId, _newPeriodName, start, end);
+        var result = await Sender.Send(cmd);
+        if (result.IsSuccess)
+        {
+            Snackbar.Add("Periode payroll berhasil dibuat.", Severity.Success);
+            _createDialogOpen = false;
+            await LoadData();
+        }
+        else
+        {
+            Snackbar.Add(result.Error.Message, Severity.Error);
+        }
+        _saving = false;
+    }
+
+    private async Task CalculatePayroll(Guid periodId)
+    {
+        var result = await Sender.Send(new CalculatePayrollCommand(periodId));
+        if (result.IsSuccess)
+        {
+            Snackbar.Add("Kalkulasi payroll berhasil diselesaikan.", Severity.Success);
+            await LoadData();
+        }
+        else
+        {
+            Snackbar.Add(result.Error.Message, Severity.Error);
+        }
+    }
+
+    private async Task ApprovePayroll(Guid periodId)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Konfirmasi Approval Payroll",
+            "Apakah Anda yakin ingin menyetujui payroll periode ini? Nilai gaji tidak dapat diubah setelah disetujui.",
+            yesText: "Setujui", cancelText: "Batal");
+
+        if (confirmed == true)
+        {
+            var result = await Sender.Send(new ApprovePayrollCommand(periodId));
+            if (result.IsSuccess)
+            {
+                Snackbar.Add("Periode payroll berhasil disetujui.", Severity.Success);
+                await LoadData();
+            }
+            else
+            {
+                Snackbar.Add(result.Error.Message, Severity.Error);
+            }
+        }
+    }
+
+    private async Task PayPayroll(Guid periodId)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Konfirmasi Pembayaran Gaji",
+            "Apakah Anda yakin ingin mengeksekusi pembayaran gaji untuk seluruh karyawan pada periode ini?",
+            yesText: "Bayar Sekarang", cancelText: "Batal");
+
+        if (confirmed == true)
+        {
+            var result = await Sender.Send(new PayPayrollCommand(periodId));
+            if (result.IsSuccess)
+            {
+                Snackbar.Add("Pembayaran gaji berhasil dicatat sebagai LUNAS.", Severity.Success);
+                await LoadData();
+            }
+            else
+            {
+                Snackbar.Add(result.Error.Message, Severity.Error);
+            }
+        }
+    }
+
+    private void ShowDetails(PayrollPeriodDto period)
+    {
+        _selectedPeriod = period;
+        _detailsDialogOpen = true;
+    }
+
+    private Color GetStatusColor(PayrollStatus status) => status switch
+    {
+        PayrollStatus.Draft => Color.Default,
+        PayrollStatus.Calculated => Color.Info,
+        PayrollStatus.Approved => Color.Primary,
+        PayrollStatus.Paid => Color.Success,
+        _ => Color.Default
+    };
+}

@@ -1,0 +1,339 @@
+@page "/reports/financial"
+@attribute [Authorize(Policy = Permissions.Reports.FinancialView)]
+@inject ISender Sender
+@inject ISnackbar Snackbar
+@inject IApplicationDbContext DbContext
+
+<PageTitle>Laporan Keuangan & Finansial - Enterprise ERP</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="my-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <div>
+            <MudText Typo="Typo.h5" Color="Color.Primary" Class="fw-bold">Laporan Finansial & Keuangan</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Neraca Keuangan (Balance Sheet), Laba Rugi (P&L), dan Neraca Saldo (Trial Balance).</MudText>
+        </div>
+        <div class="d-flex gap-2">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadActiveTabReport">
+                Segarkan Data
+            </MudButton>
+        </div>
+    </div>
+
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" TabPanelsClass="pa-6" ActivePanelIndexChanged="OnTabChanged">
+        <!-- TAB 1: NERACA (BALANCE SHEET) -->
+        <MudTabPanel Text="Neraca (Balance Sheet)" Icon="@Icons.Material.Filled.AccountBalance">
+            <div class="d-flex justify-space-between align-center mb-4">
+                <MudDatePicker @bind-Date="_asOfDate" @bind-Date:after="LoadBalanceSheet" Label="Posisi Per Tanggal" />
+                @if (_balanceSheet != null)
+                {
+                    @if (_balanceSheet.IsBalanced)
+                    {
+                        <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle">STATUS: SEIMBANG (BALANCED)</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Color="Color.Error" Icon="@Icons.Material.Filled.Warning">STATUS: TIDAK SEIMBANG</MudChip>
+                    }
+                }
+            </div>
+
+            @if (_loading)
+            {
+                <div class="d-flex justify-center my-8"><MudProgressCircular Color="Color.Primary" Indeterminate="true" /></div>
+            }
+            else if (_balanceSheet != null)
+            {
+                <MudGrid>
+                    <!-- ASET (AKTIVA) -->
+                    <MudItem xs="12" md="6">
+                        <MudCard Elevation="1">
+                            <MudCardHeader Class="bg-primary text-white py-2">
+                                <CardHeaderContent>
+                                    <MudText Typo="Typo.subtitle1" Class="fw-bold text-white">1. Aset (Aktiva)</MudText>
+                                </CardHeaderContent>
+                            </MudCardHeader>
+                            <MudCardContent Class="pa-0">
+                                <MudTable Items="_balanceSheet.Assets" Dense="true" Hover="true" Elevation="0">
+                                    <HeaderContent>
+                                        <MudTh>Kode</MudTh>
+                                        <MudTh>Nama Akun</MudTh>
+                                        <MudTh Style="text-align: right;">Saldo (IDR)</MudTh>
+                                    </HeaderContent>
+                                    <RowTemplate>
+                                        <MudTd>@context.AccountCode</MudTd>
+                                        <MudTd>@context.AccountName</MudTd>
+                                        <MudTd Style="text-align: right;">Rp @context.NetBalance.ToString("N2")</MudTd>
+                                    </RowTemplate>
+                                </MudTable>
+                                <div class="d-flex justify-space-between pa-4 bg-light fw-bold border-top">
+                                    <span>TOTAL ASET</span>
+                                    <span class="text-primary">Rp @_balanceSheet.TotalAssets.ToString("N2")</span>
+                                </div>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+
+                    <!-- KEWAJIBAN & EKUITAS (PASIVA) -->
+                    <MudItem xs="12" md="6">
+                        <MudCard Elevation="1" Class="mb-4">
+                            <MudCardHeader Class="bg-warning text-dark py-2">
+                                <CardHeaderContent>
+                                    <MudText Typo="Typo.subtitle1" Class="fw-bold">2. Kewajiban (Liabilitas)</MudText>
+                                </CardHeaderContent>
+                            </MudCardHeader>
+                            <MudCardContent Class="pa-0">
+                                <MudTable Items="_balanceSheet.Liabilities" Dense="true" Hover="true" Elevation="0">
+                                    <HeaderContent>
+                                        <MudTh>Kode</MudTh>
+                                        <MudTh>Nama Akun</MudTh>
+                                        <MudTh Style="text-align: right;">Saldo (IDR)</MudTh>
+                                    </HeaderContent>
+                                    <RowTemplate>
+                                        <MudTd>@context.AccountCode</MudTd>
+                                        <MudTd>@context.AccountName</MudTd>
+                                        <MudTd Style="text-align: right;">Rp @context.NetBalance.ToString("N2")</MudTd>
+                                    </RowTemplate>
+                                </MudTable>
+                                <div class="d-flex justify-space-between pa-4 bg-light fw-bold border-top">
+                                    <span>TOTAL KEWAJIBAN</span>
+                                    <span>Rp @_balanceSheet.TotalLiabilities.ToString("N2")</span>
+                                </div>
+                            </MudCardContent>
+                        </MudCard>
+
+                        <MudCard Elevation="1">
+                            <MudCardHeader Class="bg-info text-white py-2">
+                                <CardHeaderContent>
+                                    <MudText Typo="Typo.subtitle1" Class="fw-bold text-white">3. Ekuitas (Modal)</MudText>
+                                </CardHeaderContent>
+                            </MudCardHeader>
+                            <MudCardContent Class="pa-0">
+                                <MudTable Items="_balanceSheet.Equity" Dense="true" Hover="true" Elevation="0">
+                                    <HeaderContent>
+                                        <MudTh>Kode</MudTh>
+                                        <MudTh>Nama Akun</MudTh>
+                                        <MudTh Style="text-align: right;">Saldo (IDR)</MudTh>
+                                    </HeaderContent>
+                                    <RowTemplate>
+                                        <MudTd>@context.AccountCode</MudTd>
+                                        <MudTd>@context.AccountName</MudTd>
+                                        <MudTd Style="text-align: right;">Rp @context.NetBalance.ToString("N2")</MudTd>
+                                    </RowTemplate>
+                                </MudTable>
+                                <div class="d-flex justify-space-between pa-4 bg-light fw-bold border-top">
+                                    <span>TOTAL EKUITAS + LABA BERJALAN</span>
+                                    <span>Rp @_balanceSheet.TotalEquity.ToString("N2")</span>
+                                </div>
+                                <div class="d-flex justify-space-between pa-4 bg-secondary text-white fw-bold">
+                                    <span>TOTAL KEWAJIBAN & EKUITAS</span>
+                                    <span>Rp @_balanceSheet.TotalLiabilitiesAndEquity.ToString("N2")</span>
+                                </div>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+                </MudGrid>
+            }
+        </MudTabPanel>
+
+        <!-- TAB 2: LABA RUGI (PROFIT & LOSS) -->
+        <MudTabPanel Text="Laba Rugi (Profit & Loss)" Icon="@Icons.Material.Filled.TrendingUp">
+            <div class="d-flex gap-4 align-center mb-4">
+                <MudDatePicker @bind-Date="_pnlStartDate" Label="Tanggal Mulai" />
+                <MudDatePicker @bind-Date="_pnlEndDate" Label="Tanggal Selesai" />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadProfitAndLoss">Filter</MudButton>
+            </div>
+
+            @if (_loading)
+            {
+                <div class="d-flex justify-center my-8"><MudProgressCircular Color="Color.Primary" Indeterminate="true" /></div>
+            }
+            else if (_profitAndLoss != null)
+            {
+                <MudCard Elevation="1">
+                    <MudCardContent>
+                        <!-- PENDAPATAN -->
+                        <MudText Typo="Typo.subtitle1" Class="fw-bold text-primary mb-2">1. PENDAPATAN OPERASIONAL</MudText>
+                        <MudTable Items="_profitAndLoss.Revenues" Dense="true" Hover="true" Elevation="0">
+                            <RowTemplate>
+                                <MudTd Style="width: 20%;">@context.AccountCode</MudTd>
+                                <MudTd>@context.AccountName</MudTd>
+                                <MudTd Style="text-align: right; width: 25%;">Rp @context.NetBalance.ToString("N2")</MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                        <div class="d-flex justify-space-between pa-3 bg-light fw-bold">
+                            <span>TOTAL PENDAPATAN</span>
+                            <span class="text-primary">Rp @_profitAndLoss.TotalRevenue.ToString("N2")</span>
+                        </div>
+
+                        <!-- HPP -->
+                        <MudText Typo="Typo.subtitle1" Class="fw-bold text-danger mt-4 mb-2">2. HARGA POKOK PENJUALAN (HPP)</MudText>
+                        <MudTable Items="_profitAndLoss.CostOfGoodsSold" Dense="true" Hover="true" Elevation="0">
+                            <RowTemplate>
+                                <MudTd Style="width: 20%;">@context.AccountCode</MudTd>
+                                <MudTd>@context.AccountName</MudTd>
+                                <MudTd Style="text-align: right; width: 25%;">Rp @context.NetBalance.ToString("N2")</MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                        <div class="d-flex justify-space-between pa-3 bg-light fw-bold">
+                            <span>TOTAL HARGA POKOK PENJUALAN</span>
+                            <span class="text-danger">Rp @_profitAndLoss.TotalCogs.ToString("N2")</span>
+                        </div>
+
+                        <div class="d-flex justify-space-between pa-3 bg-info text-white fw-bold my-2">
+                            <span>LABA KOTOR (GROSS PROFIT)</span>
+                            <span>Rp @_profitAndLoss.GrossProfit.ToString("N2")</span>
+                        </div>
+
+                        <!-- BEBAN OPERASIONAL -->
+                        <MudText Typo="Typo.subtitle1" Class="fw-bold text-warning mt-4 mb-2">3. BEBAN OPERASIONAL & UMUM</MudText>
+                        <MudTable Items="_profitAndLoss.Expenses" Dense="true" Hover="true" Elevation="0">
+                            <RowTemplate>
+                                <MudTd Style="width: 20%;">@context.AccountCode</MudTd>
+                                <MudTd>@context.AccountName</MudTd>
+                                <MudTd Style="text-align: right; width: 25%;">Rp @context.NetBalance.ToString("N2")</MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                        <div class="d-flex justify-space-between pa-3 bg-light fw-bold">
+                            <span>TOTAL BEBAN OPERASIONAL</span>
+                            <span>Rp @_profitAndLoss.TotalExpenses.ToString("N2")</span>
+                        </div>
+
+                        <div class="d-flex justify-space-between pa-4 bg-success text-white fw-bold mt-4" style="font-size: 1.2rem;">
+                            <span>LABA BERSIH TAHUN/PERIODE BERJALAN (NET PROFIT)</span>
+                            <span>Rp @_profitAndLoss.NetProfit.ToString("N2")</span>
+                        </div>
+                    </MudCardContent>
+                </MudCard>
+            }
+        </MudTabPanel>
+
+        <!-- TAB 3: NERACA SALDO (TRIAL BALANCE) -->
+        <MudTabPanel Text="Neraca Saldo (Trial Balance)" Icon="@Icons.Material.Filled.Balance">
+            @if (_loading)
+            {
+                <div class="d-flex justify-center my-8"><MudProgressCircular Color="Color.Primary" Indeterminate="true" /></div>
+            }
+            else if (_trialBalance != null)
+            {
+                <MudTable Items="_trialBalance.Accounts" Dense="true" Hover="true" Striped="true" Elevation="1">
+                    <HeaderContent>
+                        <MudTh>Kode Akun</MudTh>
+                        <MudTh>Nama Akun</MudTh>
+                        <MudTh>Kategori</MudTh>
+                        <MudTh Style="text-align: right;">Total Debit (IDR)</MudTh>
+                        <MudTh Style="text-align: right;">Total Kredit (IDR)</MudTh>
+                        <MudTh Style="text-align: right;">Saldo Bersih</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd><strong>@context.AccountCode</strong></MudTd>
+                        <MudTd>@context.AccountName</MudTd>
+                        <MudTd><MudChip T="string" Size="Size.Small">@context.AccountType</MudChip></MudTd>
+                        <MudTd Style="text-align: right;">Rp @context.TotalDebit.ToString("N2")</MudTd>
+                        <MudTd Style="text-align: right;">Rp @context.TotalCredit.ToString("N2")</MudTd>
+                        <MudTd Style="text-align: right;" Class="fw-bold">Rp @context.NetBalance.ToString("N2")</MudTd>
+                    </RowTemplate>
+                    <FooterContent>
+                        <MudTFootRow Class="bg-light fw-bold">
+                            <MudTd colspan="3">GRAND TOTAL PERGERAKAN AKUN</MudTd>
+                            <MudTd Style="text-align: right;" Class="text-primary">Rp @_trialBalance.TotalDebit.ToString("N2")</MudTd>
+                            <MudTd Style="text-align: right;" Class="text-primary">Rp @_trialBalance.TotalCredit.ToString("N2")</MudTd>
+                            <MudTd Style="text-align: right;">
+                                @if (_trialBalance.IsBalanced)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success">BALANCE</MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Error">SELISIH</MudChip>
+                                }
+                            </MudTd>
+                        </MudTFootRow>
+                    </FooterContent>
+                </MudTable>
+            }
+        </MudTabPanel>
+    </MudTabs>
+</MudContainer>
+
+@code {
+    private Guid _companyId;
+    private bool _loading = true;
+    private int _activeTab = 0;
+
+    private DateTime? _asOfDate = DateTime.Today;
+    private DateTime? _pnlStartDate = new DateTime(DateTime.Today.Year, 1, 1);
+    private DateTime? _pnlEndDate = DateTime.Today;
+
+    private BalanceSheetDto? _balanceSheet;
+    private ProfitAndLossDto? _profitAndLoss;
+    private TrialBalanceDto? _trialBalance;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var comp = await DbContext.Companies.FirstOrDefaultAsync();
+        if (comp != null) _companyId = comp.Id;
+        await LoadActiveTabReport();
+    }
+
+    private async Task OnTabChanged(int index)
+    {
+        _activeTab = index;
+        await LoadActiveTabReport();
+    }
+
+    private async Task LoadActiveTabReport()
+    {
+        if (_activeTab == 0) await LoadBalanceSheet();
+        else if (_activeTab == 1) await LoadProfitAndLoss();
+        else if (_activeTab == 2) await LoadTrialBalance();
+    }
+
+    private async Task LoadBalanceSheet()
+    {
+        _loading = true;
+        var date = DateOnly.FromDateTime(_asOfDate ?? DateTime.Today);
+        var result = await Sender.Send(new GetBalanceSheetQuery(_companyId, date));
+        if (result.IsSuccess)
+        {
+            _balanceSheet = result.Value;
+        }
+        else
+        {
+            Snackbar.Add(result.Error.Message, Severity.Error);
+        }
+        _loading = false;
+    }
+
+    private async Task LoadProfitAndLoss()
+    {
+        _loading = true;
+        var start = DateOnly.FromDateTime(_pnlStartDate ?? new DateTime(DateTime.Today.Year, 1, 1));
+        var end = DateOnly.FromDateTime(_pnlEndDate ?? DateTime.Today);
+        var result = await Sender.Send(new GetProfitAndLossQuery(_companyId, start, end));
+        if (result.IsSuccess)
+        {
+            _profitAndLoss = result.Value;
+        }
+        else
+        {
+            Snackbar.Add(result.Error.Message, Severity.Error);
+        }
+        _loading = false;
+    }
+
+    private async Task LoadTrialBalance()
+    {
+        _loading = true;
+        var date = DateOnly.FromDateTime(_asOfDate ?? DateTime.Today);
+        var result = await Sender.Send(new GetTrialBalanceQuery(_companyId, date));
+        if (result.IsSuccess)
+        {
+            _trialBalance = result.Value;
+        }
+        else
+        {
+            Snackbar.Add(result.Error.Message, Severity.Error);
+        }
+        _loading = false;
+    }
+}

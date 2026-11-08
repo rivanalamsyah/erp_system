@@ -55,6 +55,14 @@ public interface IApplicationDbContext
     DbSet<ERP.Domain.Entities.Finance.Payment> Payments { get; }
     DbSet<ERP.Domain.Entities.Finance.PaymentAllocation> PaymentAllocations { get; }
 
+    // HR
+    DbSet<ERP.Domain.Entities.Hr.Employee> Employees { get; }
+    DbSet<ERP.Domain.Entities.Hr.AttendanceRecord> AttendanceRecords { get; }
+    DbSet<ERP.Domain.Entities.Hr.LeaveType> LeaveTypes { get; }
+    DbSet<ERP.Domain.Entities.Hr.LeaveRequest> LeaveRequests { get; }
+    DbSet<ERP.Domain.Entities.Hr.PayrollPeriod> PayrollPeriods { get; }
+    DbSet<ERP.Domain.Entities.Hr.PayrollItem> PayrollItems { get; }
+
     // Audit
     DbSet<AuditLog> AuditLogs { get; }
 

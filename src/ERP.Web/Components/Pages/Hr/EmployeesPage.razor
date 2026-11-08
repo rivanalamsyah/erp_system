@@ -1,0 +1,257 @@
+@page "/hr/employees"
+@attribute [Authorize(Policy = Permissions.Hr.EmployeeManage)]
+@inject ISender Sender
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IApplicationDbContext DbContext
+
+<PageTitle>Manajemen Karyawan - Enterprise ERP</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="my-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <div>
+            <MudText Typo="Typo.h5" Color="Color.Primary" Class="fw-bold">Manajemen Karyawan (HR)</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Kelola biodata karyawan, status kepegawaian, dan informasi departemen.</MudText>
+        </div>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="OpenCreateDialog">
+            Tambah Karyawan
+        </MudButton>
+    </div>
+
+    <MudCard Elevation="2" Class="mb-4">
+        <MudCardContent>
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_searchTerm" Placeholder="Cari nama, NIK, atau no KTP..." Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" DebounceInterval="400" OnDebounceIntervalElapsed="LoadData" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudSelect T="Guid?" Value="_selectedDepartmentId" ValueChanged="OnDepartmentChanged" Label="Filter Departemen" Clearable="true">
+                        <MudSelectItem T="Guid?" Value="@((Guid?)null)">Semua Departemen</MudSelectItem>
+                        @foreach (var dept in _departments)
+                        {
+                            <MudSelectItem T="Guid?" Value="@((Guid?)dept.Id)">@dept.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="2" Class="d-flex align-center">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true" OnClick="LoadData">Muat Ulang</MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudCardContent>
+    </MudCard>
+
+    <MudTable Items="_employees" Hover="true" Striped="true" Loading="_loading" Elevation="2">
+        <HeaderContent>
+            <MudTh>NIK</MudTh>
+            <MudTh>Nama Lengkap</MudTh>
+            <MudTh>No. KTP</MudTh>
+            <MudTh>Cabang</MudTh>
+            <MudTh>Departemen</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Tgl Masuk</MudTh>
+            <MudTh Style="text-align: right;">Gaji Pokok</MudTh>
+            <MudTh>Status Aktif</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="NIK"><strong>@context.EmployeeNumber</strong></MudTd>
+            <MudTd DataLabel="Nama Lengkap">@context.FullName</MudTd>
+            <MudTd DataLabel="No. KTP">@context.IdentityCardNumber</MudTd>
+            <MudTd DataLabel="Cabang">@context.BranchName</MudTd>
+            <MudTd DataLabel="Departemen">@context.DepartmentName</MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.EmploymentStatus)">
+                    @context.EmploymentStatus
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Tgl Masuk">@context.HireDate.ToString("dd/MM/yyyy")</MudTd>
+            <MudTd DataLabel="Gaji Pokok" Style="text-align: right;">Rp @context.BasicSalary.ToString("N0")</MudTd>
+            <MudTd DataLabel="Status Aktif">
+                @if (context.IsActive)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Aktif</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error">Non-Aktif</MudChip>
+                }
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Align="Align.Center" Class="my-4">Tidak ada data karyawan yang ditemukan.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudContainer>
+
+<MudDialog @bind-Visible="_createDialogOpen" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Tambah Karyawan Baru</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_newEmployeeNumber" Label="NIK (Nomor Induk Karyawan)" Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_newFullName" Label="Nama Lengkap" Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_newIdentityCardNumber" Label="No. KTP / NIK Dukcapil" Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="Guid" @bind-Value="_newBranchId" Label="Cabang" Required="true">
+                    @foreach (var br in _branches)
+                    {
+                        <MudSelectItem Value="@br.Id">@br.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="Guid" @bind-Value="_newDepartmentId" Label="Departemen" Required="true">
+                    @foreach (var dept in _departments)
+                    {
+                        <MudSelectItem Value="@dept.Id">@dept.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="EmploymentStatus" @bind-Value="_newStatus" Label="Status Kepegawaian">
+                    <MudSelectItem Value="EmploymentStatus.Permanent">Permanent (Tetap)</MudSelectItem>
+                    <MudSelectItem Value="EmploymentStatus.Contract">Contract (Kontrak)</MudSelectItem>
+                    <MudSelectItem Value="EmploymentStatus.Probation">Probation (Percobaan)</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_newBirthDate" Label="Tanggal Lahir" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_newHireDate" Label="Tanggal Masuk / Mulai Bekerja" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudNumericField T="decimal" @bind-Value="_newBasicSalary" Label="Gaji Pokok (IDR)" Min="0" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _createDialogOpen = false">Batal</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveEmployee" Disabled="_saving">
+            @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+            Simpan
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<EmployeeDto> _employees = [];
+    private List<Department> _departments = [];
+    private List<Branch> _branches = [];
+    private Guid _companyId;
+    private bool _loading = true;
+    private bool _saving = false;
+    private string? _searchTerm;
+    private Guid? _selectedDepartmentId;
+
+    private bool _createDialogOpen;
+    private DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Medium, FullWidth = true };
+
+    private string _newEmployeeNumber = string.Empty;
+    private string _newFullName = string.Empty;
+    private string _newIdentityCardNumber = string.Empty;
+    private Guid _newBranchId;
+    private Guid _newDepartmentId;
+    private EmploymentStatus _newStatus = EmploymentStatus.Permanent;
+    private DateTime? _newBirthDate = new DateTime(1995, 1, 1);
+    private DateTime? _newHireDate = DateTime.Today;
+    private decimal _newBasicSalary = 5000000m;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var comp = await DbContext.Companies.FirstOrDefaultAsync();
+        if (comp != null) _companyId = comp.Id;
+
+        _departments = await DbContext.Departments.OrderBy(d => d.Name).ToListAsync();
+        _branches = await DbContext.Branches.OrderBy(b => b.Name).ToListAsync();
+
+        if (_branches.Count > 0) _newBranchId = _branches[0].Id;
+        if (_departments.Count > 0) _newDepartmentId = _departments[0].Id;
+
+        await LoadData();
+    }
+
+    private async Task OnDepartmentChanged(Guid? value)
+    {
+        _selectedDepartmentId = value;
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        var result = await Sender.Send(new GetEmployeesQuery(_selectedDepartmentId, _searchTerm));
+        if (result.IsSuccess)
+        {
+            _employees = result.Value;
+        }
+        else
+        {
+            Snackbar.Add(result.Error.Message, Severity.Error);
+        }
+        _loading = false;
+    }
+
+    private void OpenCreateDialog()
+    {
+        _newEmployeeNumber = $"EMP-{DateTime.UtcNow.Ticks % 10000:D4}";
+        _newFullName = string.Empty;
+        _newIdentityCardNumber = string.Empty;
+        _newBasicSalary = 5000000m;
+        _createDialogOpen = true;
+    }
+
+    private async Task SaveEmployee()
+    {
+        if (string.IsNullOrWhiteSpace(_newEmployeeNumber) || string.IsNullOrWhiteSpace(_newFullName) || string.IsNullOrWhiteSpace(_newIdentityCardNumber))
+        {
+            Snackbar.Add("Semua field wajib diisi.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        var birthDate = DateOnly.FromDateTime(_newBirthDate ?? new DateTime(1995, 1, 1));
+        var hireDate = DateOnly.FromDateTime(_newHireDate ?? DateTime.Today);
+
+        var cmd = new CreateEmployeeCommand(
+            _companyId,
+            _newBranchId,
+            _newDepartmentId,
+            _newEmployeeNumber,
+            _newFullName,
+            _newIdentityCardNumber,
+            birthDate,
+            hireDate,
+            _newStatus,
+            _newBasicSalary
+        );
+
+        var result = await Sender.Send(cmd);
+        if (result.IsSuccess)
+        {
+            Snackbar.Add("Karyawan berhasil didaftarkan.", Severity.Success);
+            _createDialogOpen = false;
+            await LoadData();
+        }
+        else
+        {
+            Snackbar.Add(result.Error.Message, Severity.Error);
+        }
+        _saving = false;
+    }
+
+    private Color GetStatusColor(EmploymentStatus status) => status switch
+    {
+        EmploymentStatus.Permanent => Color.Primary,
+        EmploymentStatus.Contract => Color.Info,
+        EmploymentStatus.Probation => Color.Warning,
+        _ => Color.Default
+    };
+}

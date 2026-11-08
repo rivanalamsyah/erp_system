@@ -1,0 +1,211 @@
+@page "/hr/attendance"
+@attribute [Authorize(Policy = Permissions.Hr.AttendanceManage)]
+@inject ISender Sender
+@inject ISnackbar Snackbar
+@inject IApplicationDbContext DbContext
+
+<PageTitle>Presensi Karyawan - Enterprise ERP</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="my-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <div>
+            <MudText Typo="Typo.h5" Color="Color.Primary" Class="fw-bold">Presensi & Kehadiran (Attendance)</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Pencatatan waktu hadir (Check-In / Check-Out) dan monitoring keterlambatan.</MudText>
+        </div>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Fingerprint" OnClick="OpenRecordDialog">
+            Catat Presensi
+        </MudButton>
+    </div>
+
+    <MudCard Elevation="2" Class="mb-4">
+        <MudCardContent>
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudDatePicker @bind-Date="_filterDate" @bind-Date:after="LoadData" Label="Pilih Tanggal Presensi" />
+                </MudItem>
+                <MudItem xs="12" md="2" Class="d-flex align-center">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true" OnClick="LoadData">Muat Ulang</MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudCardContent>
+    </MudCard>
+
+    <MudTable Items="_records" Hover="true" Striped="true" Loading="_loading" Elevation="2">
+        <HeaderContent>
+            <MudTh>NIK</MudTh>
+            <MudTh>Nama Karyawan</MudTh>
+            <MudTh>Departemen</MudTh>
+            <MudTh>Tanggal</MudTh>
+            <MudTh>Jam Masuk</MudTh>
+            <MudTh>Jam Pulang</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Keterlambatan</MudTh>
+            <MudTh>Catatan</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="NIK"><strong>@context.EmployeeNumber</strong></MudTd>
+            <MudTd DataLabel="Nama Karyawan">@context.EmployeeFullName</MudTd>
+            <MudTd DataLabel="Departemen">@context.DepartmentName</MudTd>
+            <MudTd DataLabel="Tanggal">@context.AttendanceDate.ToString("dd/MM/yyyy")</MudTd>
+            <MudTd DataLabel="Jam Masuk">@(context.CheckInTime?.ToLocalTime().ToString("HH:mm:ss") ?? "-")</MudTd>
+            <MudTd DataLabel="Jam Pulang">@(context.CheckOutTime?.ToLocalTime().ToString("HH:mm:ss") ?? "-")</MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
+                    @context.Status
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Keterlambatan">
+                @if (context.LateMinutes > 0)
+                {
+                    <span class="text-danger fw-bold">@context.LateMinutes Menit</span>
+                }
+                else
+                {
+                    <span>Tepat Waktu</span>
+                }
+            </MudTd>
+            <MudTd DataLabel="Catatan">@(context.Notes ?? "-")</MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Align="Align.Center" Class="my-4">Tidak ada catatan presensi pada tanggal ini.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudContainer>
+
+<MudDialog @bind-Visible="_recordDialogOpen" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Input Presensi Karyawan</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudSelect T="Guid" @bind-Value="_selectedEmployeeId" Label="Pilih Karyawan" Required="true">
+                    @foreach (var emp in _employees)
+                    {
+                        <MudSelectItem Value="@emp.Id">@emp.EmployeeNumber - @emp.FullName</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_recordDate" Label="Tanggal Presensi" Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="AttendanceStatus" @bind-Value="_recordStatus" Label="Status Presensi">
+                    <MudSelectItem Value="AttendanceStatus.Present">Hadir (Present)</MudSelectItem>
+                    <MudSelectItem Value="AttendanceStatus.Late">Terlambat (Late)</MudSelectItem>
+                    <MudSelectItem Value="AttendanceStatus.Excused">Izin (Excused)</MudSelectItem>
+                    <MudSelectItem Value="AttendanceStatus.Sick">Sakit (Sick)</MudSelectItem>
+                    <MudSelectItem Value="AttendanceStatus.Absent">Alpa (Absent)</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudNumericField T="int" @bind-Value="_lateMinutes" Label="Menit Terlambat (bila ada)" Min="0" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_notes" Label="Keterangan / Catatan" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _recordDialogOpen = false">Batal</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAttendance" Disabled="_saving">
+            @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+            Simpan Presensi
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<AttendanceRecordDto> _records = [];
+    private List<Employee> _employees = [];
+    private bool _loading = true;
+    private bool _saving = false;
+    private DateTime? _filterDate = DateTime.Today;
+
+    private bool _recordDialogOpen;
+    private DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Small, FullWidth = true };
+
+    private Guid _selectedEmployeeId;
+    private DateTime? _recordDate = DateTime.Today;
+    private AttendanceStatus _recordStatus = AttendanceStatus.Present;
+    private int _lateMinutes = 0;
+    private string? _notes;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _employees = await DbContext.Employees.Where(e => e.IsActive).OrderBy(e => e.FullName).ToListAsync();
+        if (_employees.Count > 0) _selectedEmployeeId = _employees[0].Id;
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        var date = DateOnly.FromDateTime(_filterDate ?? DateTime.Today);
+        var result = await Sender.Send(new GetAttendanceRecordsQuery(date));
+        if (result.IsSuccess)
+        {
+            _records = result.Value;
+        }
+        else
+        {
+            Snackbar.Add(result.Error.Message, Severity.Error);
+        }
+        _loading = false;
+    }
+
+    private void OpenRecordDialog()
+    {
+        _recordDate = DateTime.Today;
+        _recordStatus = AttendanceStatus.Present;
+        _lateMinutes = 0;
+        _notes = null;
+        _recordDialogOpen = true;
+    }
+
+    private async Task SaveAttendance()
+    {
+        if (_selectedEmployeeId == Guid.Empty)
+        {
+            Snackbar.Add("Pilih karyawan terlebih dahulu.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        var attDate = DateOnly.FromDateTime(_recordDate ?? DateTime.Today);
+        var checkInTime = _recordStatus is AttendanceStatus.Present or AttendanceStatus.Late ? DateTime.UtcNow : (DateTime?)null;
+
+        var cmd = new RecordAttendanceCommand(
+            _selectedEmployeeId,
+            attDate,
+            checkInTime,
+            null,
+            _recordStatus,
+            _lateMinutes,
+            _notes
+        );
+
+        var result = await Sender.Send(cmd);
+        if (result.IsSuccess)
+        {
+            Snackbar.Add("Presensi berhasil dicatat.", Severity.Success);
+            _recordDialogOpen = false;
+            await LoadData();
+        }
+        else
+        {
+            Snackbar.Add(result.Error.Message, Severity.Error);
+        }
+        _saving = false;
+    }
+
+    private Color GetStatusColor(AttendanceStatus status) => status switch
+    {
+        AttendanceStatus.Present => Color.Success,
+        AttendanceStatus.Late => Color.Warning,
+        AttendanceStatus.Excused => Color.Info,
+        AttendanceStatus.Sick => Color.Tertiary,
+        AttendanceStatus.Absent => Color.Error,
+        _ => Color.Default
+    };
+}

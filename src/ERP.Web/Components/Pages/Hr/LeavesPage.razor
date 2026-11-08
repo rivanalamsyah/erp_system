@@ -1,0 +1,242 @@
+@page "/hr/leaves"
+@attribute [Authorize(Policy = Permissions.Hr.LeaveApprove)]
+@inject ISender Sender
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IApplicationDbContext DbContext
+
+<PageTitle>Pengajuan Cuti Karyawan - Enterprise ERP</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="my-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <div>
+            <MudText Typo="Typo.h5" Color="Color.Primary" Class="fw-bold">Manajemen Cuti (Leave Management)</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Pengajuan cuti tahunan, cuti khusus, dan alur persetujuan (BR-HR-001).</MudText>
+        </div>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.EventAvailable" OnClick="OpenRequestDialog">
+            Ajukan Cuti Baru
+        </MudButton>
+    </div>
+
+    <MudTable Items="_leaves" Hover="true" Striped="true" Loading="_loading" Elevation="2">
+        <HeaderContent>
+            <MudTh>NIK</MudTh>
+            <MudTh>Nama Karyawan</MudTh>
+            <MudTh>Departemen</MudTh>
+            <MudTh>Tipe Cuti</MudTh>
+            <MudTh>Tgl Mulai</MudTh>
+            <MudTh>Tgl Selesai</MudTh>
+            <MudTh>Jumlah Hari</MudTh>
+            <MudTh>Alasan Cuti</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh Style="text-align: center;">Aksi</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="NIK"><strong>@context.EmployeeNumber</strong></MudTd>
+            <MudTd DataLabel="Nama Karyawan">@context.EmployeeFullName</MudTd>
+            <MudTd DataLabel="Departemen">@context.DepartmentName</MudTd>
+            <MudTd DataLabel="Tipe Cuti">@context.LeaveTypeName</MudTd>
+            <MudTd DataLabel="Tgl Mulai">@context.StartDate.ToString("dd/MM/yyyy")</MudTd>
+            <MudTd DataLabel="Tgl Selesai">@context.EndDate.ToString("dd/MM/yyyy")</MudTd>
+            <MudTd DataLabel="Jumlah Hari"><strong>@context.DaysCount Hari</strong></MudTd>
+            <MudTd DataLabel="Alasan Cuti">@context.Reason</MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
+                    @context.Status
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Aksi" Style="text-align: center;">
+                @if (context.Status == LeaveRequestStatus.Pending)
+                {
+                    <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
+                        <MudButton Color="Color.Success" StartIcon="@Icons.Material.Filled.Check" OnClick="() => ApproveLeave(context.Id, true)">Setujui</MudButton>
+                        <MudButton Color="Color.Error" StartIcon="@Icons.Material.Filled.Close" OnClick="() => ApproveLeave(context.Id, false)">Tolak</MudButton>
+                    </MudButtonGroup>
+                }
+                else
+                {
+                    <span>-</span>
+                }
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Align="Align.Center" Class="my-4">Belum ada pengajuan cuti yang tercatat.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudContainer>
+
+<MudDialog @bind-Visible="_requestDialogOpen" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Pengajuan Cuti Baru</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudSelect T="Guid" @bind-Value="_selectedEmployeeId" Label="Pilih Karyawan" Required="true">
+                    @foreach (var emp in _employees)
+                    {
+                        <MudSelectItem Value="@emp.Id">@emp.EmployeeNumber - @emp.FullName</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudSelect T="Guid" @bind-Value="_selectedLeaveTypeId" Label="Jenis Cuti" Required="true">
+                    @foreach (var lt in _leaveTypes)
+                    {
+                        <MudSelectItem Value="@lt.Id">@lt.Name (Jatah: @lt.AnnualAllowanceDays hari/tahun)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_startDate" Label="Tanggal Mulai Cuti" Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_endDate" Label="Tanggal Berakhir Cuti" Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudNumericField T="int" @bind-Value="_daysCount" Label="Jumlah Hari Kerja Cuti" Min="1" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_reason" Label="Alasan / Keperluan Cuti" Required="true" Lines="2" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _requestDialogOpen = false">Batal</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitLeave" Disabled="_saving">
+            @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+            Ajukan Permohonan Cuti
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<LeaveRequestDto> _leaves = [];
+    private List<Employee> _employees = [];
+    private List<LeaveType> _leaveTypes = [];
+    private bool _loading = true;
+    private bool _saving = false;
+
+    private bool _requestDialogOpen;
+    private DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Small, FullWidth = true };
+
+    private Guid _selectedEmployeeId;
+    private Guid _selectedLeaveTypeId;
+    private DateTime? _startDate = DateTime.Today.AddDays(1);
+    private DateTime? _endDate = DateTime.Today.AddDays(1);
+    private int _daysCount = 1;
+    private string _reason = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _employees = await DbContext.Employees.Where(e => e.IsActive).OrderBy(e => e.FullName).ToListAsync();
+        _leaveTypes = await DbContext.LeaveTypes.OrderBy(l => l.Name).ToListAsync();
+
+        if (_leaveTypes.Count == 0)
+        {
+            var comp = await DbContext.Companies.FirstOrDefaultAsync();
+            if (comp != null)
+            {
+                var defaultLeave = LeaveType.Create(comp.Id, "Cuti Tahunan", 12, Guid.NewGuid());
+                DbContext.LeaveTypes.Add(defaultLeave);
+                await DbContext.SaveChangesAsync();
+                _leaveTypes = await DbContext.LeaveTypes.ToListAsync();
+            }
+        }
+
+        if (_employees.Count > 0) _selectedEmployeeId = _employees[0].Id;
+        if (_leaveTypes.Count > 0) _selectedLeaveTypeId = _leaveTypes[0].Id;
+
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        var result = await Sender.Send(new GetLeaveRequestsQuery());
+        if (result.IsSuccess)
+        {
+            _leaves = result.Value;
+        }
+        else
+        {
+            Snackbar.Add(result.Error.Message, Severity.Error);
+        }
+        _loading = false;
+    }
+
+    private void OpenRequestDialog()
+    {
+        _startDate = DateTime.Today.AddDays(1);
+        _endDate = DateTime.Today.AddDays(1);
+        _daysCount = 1;
+        _reason = string.Empty;
+        _requestDialogOpen = true;
+    }
+
+    private async Task SubmitLeave()
+    {
+        if (string.IsNullOrWhiteSpace(_reason))
+        {
+            Snackbar.Add("Alasan cuti wajib diisi.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        var start = DateOnly.FromDateTime(_startDate ?? DateTime.Today);
+        var end = DateOnly.FromDateTime(_endDate ?? DateTime.Today);
+
+        var cmd = new CreateLeaveRequestCommand(
+            _selectedEmployeeId,
+            _selectedLeaveTypeId,
+            start,
+            end,
+            _daysCount,
+            _reason
+        );
+
+        var result = await Sender.Send(cmd);
+        if (result.IsSuccess)
+        {
+            Snackbar.Add("Permohonan cuti berhasil diajukan.", Severity.Success);
+            _requestDialogOpen = false;
+            await LoadData();
+        }
+        else
+        {
+            Snackbar.Add(result.Error.Message, Severity.Error);
+        }
+        _saving = false;
+    }
+
+    private async Task ApproveLeave(Guid leaveId, bool approve)
+    {
+        var actionText = approve ? "menyetujui" : "menolak";
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Konfirmasi Approval Cuti",
+            $"Apakah Anda yakin ingin {actionText} permohonan cuti ini?",
+            yesText: "Ya, Lanjutkan", cancelText: "Batal");
+
+        if (confirmed == true)
+        {
+            var result = await Sender.Send(new ApproveLeaveRequestCommand(leaveId, approve));
+            if (result.IsSuccess)
+            {
+                Snackbar.Add($"Permohonan cuti berhasil {(approve ? "disetujui" : "ditolak")}.", Severity.Success);
+                await LoadData();
+            }
+            else
+            {
+                Snackbar.Add(result.Error.Message, Severity.Error);
+            }
+        }
+    }
+
+    private Color GetStatusColor(LeaveRequestStatus status) => status switch
+    {
+        LeaveRequestStatus.Approved => Color.Success,
+        LeaveRequestStatus.Pending => Color.Warning,
+        LeaveRequestStatus.Rejected => Color.Error,
+        _ => Color.Default
+    };
+}
