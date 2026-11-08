@@ -1,7 +1,11 @@
 @page "/"
 @inject IApplicationDbContext DbContext
 @inject ICurrentUserService CurrentUserService
+@inject NavigationManager Navigation
 @using Microsoft.EntityFrameworkCore
+@using ERP.Domain.Entities.Sales
+@using ERP.Domain.Entities.Procurement
+@using ERP.Domain.Entities.Finance
 
 <PageTitle>Dashboard Eksekutif — Enterprise ERP</PageTitle>
 
@@ -9,95 +13,97 @@
     <div class="d-flex flex-column flex-sm-row justify-space-between align-start align-sm-center">
         <div>
             <MudText Typo="Typo.h5" Style="font-weight: 700; color: #0F172A;">
-                Dashboard Eksekutif & Ringkasan Bisnis
+                Dashboard Eksekutif & Ringkasan Enterprise
             </MudText>
             <MudText Typo="Typo.body2" Style="color: #64748B;">
-                Pantauan KPI operasional, persediaan gudang, dan integritas multi-cabang secara terintegrasi.
+                Pantauan real-time performa penjualan, pengadaan, persediaan gudang, keuangan, dan SDM terintegrasi.
             </MudText>
         </div>
-        <div class="mt-3 mt-sm-0 d-flex align-center">
+        <div class="mt-3 mt-sm-0 d-flex gap-2 align-center">
             <MudChip T="string" Color="Color.Success" Variant="Variant.Filled" Size="Size.Small" Icon="@Icons.Material.Filled.CheckCircle">
-                Sistem Online &bull; DB Connected
+                PostgreSQL 18 Connected
+            </MudChip>
+            <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" Size="Size.Small" Icon="@Icons.Material.Filled.Security">
+                PBAC Active
             </MudChip>
         </div>
     </div>
 </div>
 
-<!-- KPI Cards -->
+<!-- Primary KPI Cards Grid -->
 <MudGrid Class="mb-6">
     <MudItem xs="12" sm="6" md="3">
-        <MudCard Elevation="1" Class="pa-4 rounded-lg border border-slate-200">
+        <MudCard Elevation="2" Class="pa-4 rounded-lg border border-slate-200">
             <div class="d-flex justify-space-between align-center mb-2">
                 <MudText Typo="Typo.caption" Style="color: #64748B; font-weight: 600; text-transform: uppercase;">
-                    Total Entitas Usaha
+                    Penjualan (Sales Invoices)
                 </MudText>
                 <div class="pa-2 rounded-circle" style="background-color: #EFF6FF;">
-                    <MudIcon Icon="@Icons.Material.Filled.Business" Color="Color.Primary" Size="Size.Small" />
+                    <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Color="Color.Primary" Size="Size.Small" />
                 </div>
             </div>
-            <MudText Typo="Typo.h4" Style="font-weight: 700; color: #0F172A;">
-                @_totalCompanies
-            </MudText>
-            <MudText Typo="Typo.caption" Style="color: #16A34A; font-weight: 500;">
-                <MudIcon Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small" Style="font-size: 0.8rem;" />
-                Holding & Multi-Company Aktif
-            </MudText>
-        </MudCard>
-    </MudItem>
-
-    <MudItem xs="12" sm="6" md="3">
-        <MudCard Elevation="1" Class="pa-4 rounded-lg border border-slate-200">
-            <div class="d-flex justify-space-between align-center mb-2">
-                <MudText Typo="Typo.caption" Style="color: #64748B; font-weight: 600; text-transform: uppercase;">
-                    Kantor Cabang
-                </MudText>
-                <div class="pa-2 rounded-circle" style="background-color: #F0FDF4;">
-                    <MudIcon Icon="@Icons.Material.Filled.Store" Color="Color.Success" Size="Size.Small" />
-                </div>
-            </div>
-            <MudText Typo="Typo.h4" Style="font-weight: 700; color: #0F172A;">
-                @_totalBranches
+            <MudText Typo="Typo.h5" Style="font-weight: 700; color: #1E3A8A;">
+                Rp @_totalSalesRevenue.ToString("N0")
             </MudText>
             <MudText Typo="Typo.caption" Style="color: #64748B;">
-                Cabang Operasional Terdaftar
+                @_totalSalesOrders Pesanan Penjualan
             </MudText>
         </MudCard>
     </MudItem>
 
     <MudItem xs="12" sm="6" md="3">
-        <MudCard Elevation="1" Class="pa-4 rounded-lg border border-slate-200">
+        <MudCard Elevation="2" Class="pa-4 rounded-lg border border-slate-200">
             <div class="d-flex justify-space-between align-center mb-2">
                 <MudText Typo="Typo.caption" Style="color: #64748B; font-weight: 600; text-transform: uppercase;">
-                    Katalog Produk Aktif
+                    Pengadaan (Purchases)
                 </MudText>
                 <div class="pa-2 rounded-circle" style="background-color: #FDF4FF;">
-                    <MudIcon Icon="@Icons.Material.Filled.Inventory2" Color="Color.Secondary" Size="Size.Small" />
+                    <MudIcon Icon="@Icons.Material.Filled.ShoppingCart" Color="Color.Secondary" Size="Size.Small" />
                 </div>
             </div>
-            <MudText Typo="Typo.h4" Style="font-weight: 700; color: #0F172A;">
-                @_totalProducts
+            <MudText Typo="Typo.h5" Style="font-weight: 700; color: #701A75;">
+                Rp @_totalPurchases.ToString("N0")
             </MudText>
             <MudText Typo="Typo.caption" Style="color: #64748B;">
-                SKU Barang & Layanan
+                @_totalPurchaseOrders Pesanan Pembelian (PO)
             </MudText>
         </MudCard>
     </MudItem>
 
     <MudItem xs="12" sm="6" md="3">
-        <MudCard Elevation="1" Class="pa-4 rounded-lg border border-slate-200">
+        <MudCard Elevation="2" Class="pa-4 rounded-lg border border-slate-200">
             <div class="d-flex justify-space-between align-center mb-2">
                 <MudText Typo="Typo.caption" Style="color: #64748B; font-weight: 600; text-transform: uppercase;">
-                    Jejak Audit Tersimpan
+                    Valuasi Stok Gudang
                 </MudText>
-                <div class="pa-2 rounded-circle" style="background-color: #FFFBEB;">
-                    <MudIcon Icon="@Icons.Material.Filled.History" Color="Color.Warning" Size="Size.Small" />
+                <div class="pa-2 rounded-circle" style="background-color: #F0FDF4;">
+                    <MudIcon Icon="@Icons.Material.Filled.Warehouse" Color="Color.Success" Size="Size.Small" />
                 </div>
             </div>
-            <MudText Typo="Typo.h4" Style="font-weight: 700; color: #0F172A;">
-                @_totalAuditLogs
+            <MudText Typo="Typo.h5" Style="font-weight: 700; color: #14532D;">
+                Rp @_totalStockValuation.ToString("N0")
+            </MudText>
+            <MudText Typo="Typo.caption" Style="color: #16A34A; font-weight: 500;">
+                @_totalProducts SKU Barang Aktif
+            </MudText>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12" sm="6" md="3">
+        <MudCard Elevation="2" Class="pa-4 rounded-lg border border-slate-200">
+            <div class="d-flex justify-space-between align-center mb-2">
+                <MudText Typo="Typo.caption" Style="color: #64748B; font-weight: 600; text-transform: uppercase;">
+                    Total Karyawan (HR)
+                </MudText>
+                <div class="pa-2 rounded-circle" style="background-color: #FFFBEB;">
+                    <MudIcon Icon="@Icons.Material.Filled.People" Color="Color.Warning" Size="Size.Small" />
+                </div>
+            </div>
+            <MudText Typo="Typo.h5" Style="font-weight: 700; color: #78350F;">
+                @_totalEmployees Karyawan
             </MudText>
             <MudText Typo="Typo.caption" Style="color: #64748B;">
-                Catatan Transaksi Aman
+                @_totalAuditLogs Jejak Audit Tersimpan
             </MudText>
         </MudCard>
     </MudItem>
@@ -106,75 +112,107 @@
 <!-- Quick Action Modules & Status -->
 <MudGrid>
     <MudItem xs="12" md="8">
-        <MudCard Elevation="1" Class="pa-5 rounded-lg border border-slate-200">
+        <MudCard Elevation="2" Class="pa-5 rounded-lg border border-slate-200">
             <MudText Typo="Typo.h6" Style="font-weight: 600; color: #0F172A;" Class="mb-1">
-                Pusat Navigasi & Manajemen Modul ERP
+                Akses Cepat Modul ERP Terintegrasi
             </MudText>
             <MudText Typo="Typo.body2" Style="color: #64748B;" Class="mb-4">
-                Pilih modul bisnis di bawah ini untuk memulai input transaksi atau mengelola data master:
+                Pilih modul bisnis untuk navigasi langsung ke halaman operasional:
             </MudText>
 
             <MudGrid Spacing="3">
                 <MudItem xs="12" sm="6">
                     <MudPaper Elevation="0" Class="pa-4 rounded-lg border border-slate-200 cursor-pointer hover:shadow-md transition-all"
-                              @onclick="@(() => Navigation.NavigateTo("/master/companies"))"
+                              @onclick="@(() => Navigation.NavigateTo("/sales/orders"))"
                               Style="border-left: 4px solid #1E3A8A !important;">
                         <div class="d-flex align-center mb-2">
-                            <MudIcon Icon="@Icons.Material.Filled.Business" Color="Color.Primary" Class="mr-2" />
+                            <MudIcon Icon="@Icons.Material.Filled.PointOfSale" Color="Color.Primary" Class="mr-2" />
                             <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">
-                                Master Perusahaan & Cabang
+                                Penjualan & Distribusi
                             </MudText>
                         </div>
                         <MudText Typo="Typo.caption" Style="color: #64748B; display: block;">
-                            Atur entitas legal PT/CV, kantor pusat, dan cabang operasional regional.
+                            Kelola Penawaran (SQ), Sales Order (SO), Surat Jalan (DO), dan Faktur Penjualan (SI).
                         </MudText>
                     </MudPaper>
                 </MudItem>
 
                 <MudItem xs="12" sm="6">
                     <MudPaper Elevation="0" Class="pa-4 rounded-lg border border-slate-200 cursor-pointer hover:shadow-md transition-all"
-                              @onclick="@(() => Navigation.NavigateTo("/master/products"))"
+                              @onclick="@(() => Navigation.NavigateTo("/procurement/orders"))"
                               Style="border-left: 4px solid #0F766E !important;">
                         <div class="d-flex align-center mb-2">
-                            <MudIcon Icon="@Icons.Material.Filled.Inventory2" Color="Color.Secondary" Class="mr-2" />
+                            <MudIcon Icon="@Icons.Material.Filled.ShoppingBag" Color="Color.Secondary" Class="mr-2" />
                             <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">
-                                Master Katalog & Produk
+                                Pengadaan (Procurement)
                             </MudText>
                         </div>
                         <MudText Typo="Typo.caption" Style="color: #64748B; display: block;">
-                            Kelola SKU produk, satuan (UoM), kategori, dan penetapan harga jual-beli.
+                            Permintaan Pembelian (PR), PO Vendor, Penerimaan Barang (GRN), dan Tagihan Pemasok.
                         </MudText>
                     </MudPaper>
                 </MudItem>
 
                 <MudItem xs="12" sm="6">
                     <MudPaper Elevation="0" Class="pa-4 rounded-lg border border-slate-200 cursor-pointer hover:shadow-md transition-all"
-                              @onclick="@(() => Navigation.NavigateTo("/master/customers"))"
+                              @onclick="@(() => Navigation.NavigateTo("/inventory/stock"))"
+                              Style="border-left: 4px solid #16A34A !important;">
+                        <div class="d-flex align-center mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.Warehouse" Color="Color.Success" Class="mr-2" />
+                            <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">
+                                Persediaan & Pergudangan
+                            </MudText>
+                        </div>
+                        <MudText Typo="Typo.caption" Style="color: #64748B; display: block;">
+                            Saldo stok perpetual, transfer antar-gudang, dan penyesuaian selisih stock opname.
+                        </MudText>
+                    </MudPaper>
+                </MudItem>
+
+                <MudItem xs="12" sm="6">
+                    <MudPaper Elevation="0" Class="pa-4 rounded-lg border border-slate-200 cursor-pointer hover:shadow-md transition-all"
+                              @onclick="@(() => Navigation.NavigateTo("/finance/journals"))"
                               Style="border-left: 4px solid #2563EB !important;">
                         <div class="d-flex align-center mb-2">
-                            <MudIcon Icon="@Icons.Material.Filled.People" Color="Color.Info" Class="mr-2" />
+                            <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Color="Color.Info" Class="mr-2" />
                             <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">
-                                Pelanggan & Mitra Usaha
+                                Keuangan & Akuntansi
                             </MudText>
                         </div>
                         <MudText Typo="Typo.caption" Style="color: #64748B; display: block;">
-                            Registrasi data pelanggan, limit pagu kredit, termin bayar, dan NPWP.
+                            Bagan Akun (COA), Jurnal Umum balance, pembayaran Kas/Bank, dan tutup buku fiskal.
                         </MudText>
                     </MudPaper>
                 </MudItem>
 
                 <MudItem xs="12" sm="6">
                     <MudPaper Elevation="0" Class="pa-4 rounded-lg border border-slate-200 cursor-pointer hover:shadow-md transition-all"
-                              @onclick="@(() => Navigation.NavigateTo("/security/users"))"
+                              @onclick="@(() => Navigation.NavigateTo("/hr/payroll"))"
                               Style="border-left: 4px solid #D97706 !important;">
                         <div class="d-flex align-center mb-2">
-                            <MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Color="Color.Warning" Class="mr-2" />
+                            <MudIcon Icon="@Icons.Material.Filled.Badge" Color="Color.Warning" Class="mr-2" />
                             <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">
-                                Tata Kelola & PBAC
+                                SDM & Penggajian (HR)
                             </MudText>
                         </div>
                         <MudText Typo="Typo.caption" Style="color: #64748B; display: block;">
-                            Manajemen pengguna, pemetaan hak akses PBAC, dan audit trail operasional.
+                            Master karyawan, absensi harian, perizinan/cuti, dan batch kalkulasi gaji bulanan.
+                        </MudText>
+                    </MudPaper>
+                </MudItem>
+
+                <MudItem xs="12" sm="6">
+                    <MudPaper Elevation="0" Class="pa-4 rounded-lg border border-slate-200 cursor-pointer hover:shadow-md transition-all"
+                              @onclick="@(() => Navigation.NavigateTo("/reports/financial"))"
+                              Style="border-left: 4px solid #7C3AED !important;">
+                        <div class="d-flex align-center mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.Assessment" Color="Color.Tertiary" Class="mr-2" />
+                            <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">
+                                Laporan & Analitik Bisnis
+                            </MudText>
+                        </div>
+                        <MudText Typo="Typo.caption" Style="color: #64748B; display: block;">
+                            Neraca Keuangan, Laba Rugi (P&L), Trial Balance, serta valuasi persediaan produk.
                         </MudText>
                     </MudPaper>
                 </MudItem>
@@ -183,7 +221,7 @@
     </MudItem>
 
     <MudItem xs="12" md="4">
-        <MudCard Elevation="1" Class="pa-5 rounded-lg border border-slate-200">
+        <MudCard Elevation="2" Class="pa-5 rounded-lg border border-slate-200">
             <MudText Typo="Typo.h6" Style="font-weight: 600; color: #0F172A;" Class="mb-3">
                 Informasi Lingkungan Sistem
             </MudText>
@@ -209,24 +247,39 @@
                     <MudText Typo="Typo.caption" Style="color: #64748B;">UI Component Kit</MudText>
                     <MudText Typo="Typo.caption" Style="font-weight: 600;">MudBlazor v9 Enterprise</MudText>
                 </div>
+                <div class="d-flex justify-space-between py-1 border-b border-slate-100">
+                    <MudText Typo="Typo.caption" Style="color: #64748B;">Total Tabel Database</MudText>
+                    <MudText Typo="Typo.caption" Style="font-weight: 600;">56 Tabel (8 Schemas)</MudText>
+                </div>
             </MudStack>
         </MudCard>
     </MudItem>
 </MudGrid>
 
 @code {
-    [Inject] NavigationManager Navigation { get; set; } = default!;
-
-    private int _totalCompanies;
-    private int _totalBranches;
+    private decimal _totalSalesRevenue;
+    private int _totalSalesOrders;
+    private decimal _totalPurchases;
+    private int _totalPurchaseOrders;
+    private decimal _totalStockValuation;
     private int _totalProducts;
+    private int _totalEmployees;
     private int _totalAuditLogs;
 
     protected override async Task OnInitializedAsync()
     {
-        _totalCompanies = await DbContext.Companies.IgnoreQueryFilters().CountAsync();
-        _totalBranches = await DbContext.Branches.IgnoreQueryFilters().CountAsync();
+        _totalSalesRevenue = await DbContext.SalesInvoices.SumAsync(i => (decimal?)i.TotalAmount) ?? 0m;
+        _totalSalesOrders = await DbContext.SalesOrders.CountAsync();
+        _totalPurchases = await DbContext.PurchaseOrders.SumAsync(p => (decimal?)p.TotalAmount) ?? 0m;
+        _totalPurchaseOrders = await DbContext.PurchaseOrders.CountAsync();
+
+        var balances = await DbContext.StockBalances
+            .Include(b => b.Product)
+            .ToListAsync();
+        _totalStockValuation = balances.Sum(b => b.PhysicalQuantity * (b.AverageCost > 0 ? b.AverageCost : (b.Product != null ? b.Product.PurchasePrice : 0m)));
+
         _totalProducts = await DbContext.Products.IgnoreQueryFilters().CountAsync();
+        _totalEmployees = await DbContext.Employees.IgnoreQueryFilters().CountAsync();
         _totalAuditLogs = await DbContext.AuditLogs.CountAsync();
     }
 }
