@@ -1,0 +1,301 @@
+@page "/master/companies"
+@inject ISender Sender
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@using ERP.Application.Features.Master.Companies
+
+<PageTitle>Master Perusahaan & Holding — Enterprise ERP</PageTitle>
+
+<div class="mb-4 d-flex justify-space-between align-center">
+    <div>
+        <MudText Typo="Typo.h5" Style="font-weight: 700; color: #0F172A;">
+            Master Perusahaan (Holding & Subsidiaries)
+        </MudText>
+        <MudText Typo="Typo.body2" Style="color: #64748B;">
+            Kelola entitas hukum, nomor NPWP, dan konfigurasi multi-company dalam holding.
+        </MudText>
+    </div>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+        Tambah Perusahaan
+    </MudButton>
+</div>
+
+<MudCard Elevation="1" Class="rounded-lg border border-slate-200">
+    <MudTable ServerData="LoadServerData" @ref="_table" Dense="true" Hover="true" Striped="true" Loading="@_loading">
+        <ToolBarContent>
+            <MudText Typo="Typo.h6" Style="font-weight: 600;">Daftar Entitas Perusahaan</MudText>
+            <MudSpacer />
+            <MudTextField @bind-Value="_searchTerm" Placeholder="Cari kode, nama, NPWP..." Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Class="mt-0"
+                          Clearable="true" Immediate="true" OnKeyUp="OnSearch" DebounceInterval="300" />
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Kode</MudTh>
+            <MudTh>Nama Perusahaan</MudTh>
+            <MudTh>NPWP</MudTh>
+            <MudTh>Alamat</MudTh>
+            <MudTh>Telepon / Email</MudTh>
+            <MudTh>Mata Uang</MudTh>
+            <MudTh Style="text-align: center;">Jumlah Cabang</MudTh>
+            <MudTh Style="text-align: right;">Aksi</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Kode">
+                <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" Size="Size.Small">
+                    @context.Code
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Nama">
+                <MudText Typo="Typo.body2" Style="font-weight: 600;">@context.Name</MudText>
+            </MudTd>
+            <MudTd DataLabel="NPWP">@context.TaxIdentificationNumber</MudTd>
+            <MudTd DataLabel="Alamat">
+                <MudText Typo="Typo.body2" Style="font-size: 0.8rem; color: #475569; max-width: 250px;">
+                    @context.Address
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Kontak">
+                <MudText Typo="Typo.caption" Style="display: block;">@context.Phone</MudText>
+                <MudText Typo="Typo.caption" Style="color: #64748B;">@context.Email</MudText>
+            </MudTd>
+            <MudTd DataLabel="Mata Uang">
+                <MudChip T="string" Color="Color.Default" Size="Size.Small">@context.CurrencyCode</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Cabang" Style="text-align: center;">
+                <MudBadge Content="@context.BranchCount" Color="Color.Info" Overlap="false" />
+            </MudTd>
+            <MudTd DataLabel="Aksi" Style="text-align: right;">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                               OnClick="@(() => OpenEditDialog(context))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => DeleteCompanyAsync(context))" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <div class="pa-8 text-center">
+                <MudIcon Icon="@Icons.Material.Filled.Business" Size="Size.Large" Color="Color.Default" Class="mb-2" />
+                <MudText Typo="Typo.body1" Style="font-weight: 600;">Belum ada entitas perusahaan</MudText>
+                <MudText Typo="Typo.body2" Style="color: #64748B;">Klik tombol "Tambah Perusahaan" untuk membuat entitas baru.</MudText>
+            </div>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[] { 10, 25, 50 }" InfoFormat="{first_item}-{last_item} dari {all_items}" />
+        </PagerContent>
+    </MudTable>
+</MudCard>
+
+<!-- Dialog Form Tambah / Edit Perusahaan -->
+<MudDialog @bind-Visible="_dialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="font-weight: 700;">
+            @(_isEditMode ? "Ubah Data Perusahaan" : "Tambah Entitas Perusahaan Baru")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            @if (!_isEditMode)
+            {
+                <MudTextField @bind-Value="_model.Code" Label="Kode Perusahaan (Unik)" Required="true"
+                              Placeholder="Misal: CMP-002" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            }
+            <MudTextField @bind-Value="_model.Name" Label="Nama Legal Perusahaan" Required="true"
+                          Placeholder="Misal: PT Solusi Logistik Nusantara" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudTextField @bind-Value="_model.TaxIdentificationNumber" Label="Nomor Pokok Wajib Pajak (NPWP)" Required="true"
+                          Placeholder="Misal: 01.234.567.8-901.000" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudTextField @bind-Value="_model.Address" Label="Alamat Kantor Pusat" Required="true" Lines="2"
+                          Placeholder="Alamat lengkap..." Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <div class="d-flex gap-2">
+                <MudTextField @bind-Value="_model.Phone" Label="Nomor Telepon"
+                              Placeholder="+62 21..." Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-1" />
+                <MudTextField @bind-Value="_model.Email" Label="Email Kantor"
+                              Placeholder="office@company.com" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-1" />
+            </div>
+            <MudTextField @bind-Value="_model.CurrencyCode" Label="Mata Uang Dasar" Required="true"
+                          Placeholder="IDR" Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _dialogVisible = false">Batal</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveCompanyAsync" Disabled="_saving">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Menyimpan...</span>
+            }
+            else
+            {
+                <span>Simpan</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private MudTable<CompanyDto>? _table;
+    private string? _searchTerm;
+    private bool _loading;
+    private bool _saving;
+    private bool _dialogVisible;
+    private bool _isEditMode;
+    private CompanyFormModel _model = new();
+
+    private readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+
+    private async Task<TableData<CompanyDto>> LoadServerData(TableState state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            var query = new GetCompaniesQuery(
+                SearchTerm: _searchTerm,
+                PageNumber: state.Page + 1,
+                PageSize: state.PageSize);
+
+            var result = await Sender.Send(query, cancellationToken);
+            if (result.IsSuccess)
+            {
+                return new TableData<CompanyDto>
+                {
+                    TotalItems = result.Value.TotalCount,
+                    Items = result.Value.Items
+                };
+            }
+
+            Snackbar.Add(result.Error.Description, Severity.Error);
+            return new TableData<CompanyDto> { TotalItems = 0, Items = [] };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OnSearch()
+    {
+        _table?.ReloadServerData();
+    }
+
+    private void OpenCreateDialog()
+    {
+        _isEditMode = false;
+        _model = new CompanyFormModel { CurrencyCode = "IDR" };
+        _dialogVisible = true;
+    }
+
+    private void OpenEditDialog(CompanyDto dto)
+    {
+        _isEditMode = true;
+        _model = new CompanyFormModel
+        {
+            Id = dto.Id,
+            Code = dto.Code,
+            Name = dto.Name,
+            TaxIdentificationNumber = dto.TaxIdentificationNumber,
+            Address = dto.Address,
+            Phone = dto.Phone,
+            Email = dto.Email,
+            CurrencyCode = dto.CurrencyCode
+        };
+        _dialogVisible = true;
+    }
+
+    private async Task SaveCompanyAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_model.Name) || string.IsNullOrWhiteSpace(_model.TaxIdentificationNumber) ||
+            string.IsNullOrWhiteSpace(_model.Address))
+        {
+            Snackbar.Add("Mohon lengkapi seluruh field yang wajib diisi.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            if (_isEditMode)
+            {
+                var command = new UpdateCompanyCommand(
+                    Id: _model.Id!.Value,
+                    Name: _model.Name,
+                    TaxIdentificationNumber: _model.TaxIdentificationNumber,
+                    Address: _model.Address,
+                    Phone: _model.Phone,
+                    Email: _model.Email,
+                    CurrencyCode: _model.CurrencyCode);
+
+                var result = await Sender.Send(command);
+                if (result.IsSuccess)
+                {
+                    Snackbar.Add("Perusahaan berhasil diperbarui.", Severity.Success);
+                    _dialogVisible = false;
+                    _table?.ReloadServerData();
+                }
+                else
+                {
+                    Snackbar.Add(result.Error.Description, Severity.Error);
+                }
+            }
+            else
+            {
+                var command = new CreateCompanyCommand(
+                    Code: _model.Code,
+                    Name: _model.Name,
+                    TaxIdentificationNumber: _model.TaxIdentificationNumber,
+                    Address: _model.Address,
+                    Phone: _model.Phone,
+                    Email: _model.Email,
+                    CurrencyCode: _model.CurrencyCode);
+
+                var result = await Sender.Send(command);
+                if (result.IsSuccess)
+                {
+                    Snackbar.Add("Perusahaan baru berhasil didaftarkan.", Severity.Success);
+                    _dialogVisible = false;
+                    _table?.ReloadServerData();
+                }
+                else
+                {
+                    Snackbar.Add(result.Error.Description, Severity.Error);
+                }
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteCompanyAsync(CompanyDto dto)
+    {
+        bool? confirmed = await DialogService.ShowMessageBoxAsync(
+            "Konfirmasi Hapus",
+            $"Apakah Anda yakin ingin menghapus perusahaan '{dto.Name}' ({dto.Code})?",
+            yesText: "Hapus", cancelText: "Batal");
+
+        if (confirmed == true)
+        {
+            var result = await Sender.Send(new DeleteCompanyCommand(dto.Id));
+            if (result.IsSuccess)
+            {
+                Snackbar.Add("Perusahaan berhasil dihapus.", Severity.Success);
+                _table?.ReloadServerData();
+            }
+            else
+            {
+                Snackbar.Add(result.Error.Description, Severity.Error);
+            }
+        }
+    }
+
+    private class CompanyFormModel
+    {
+        public Guid? Id { get; set; }
+        public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string TaxIdentificationNumber { get; set; } = string.Empty;
+        public string Address { get; set; } = string.Empty;
+        public string? Phone { get; set; }
+        public string? Email { get; set; }
+        public string CurrencyCode { get; set; } = "IDR";
+    }
+}
+

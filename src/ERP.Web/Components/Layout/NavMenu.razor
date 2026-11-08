@@ -1,0 +1,146 @@
+@inject NavigationManager Navigation
+
+<MudNavMenu Bordered="false" Rounded="false" Margin="Margin.Dense" Color="Color.Primary" Class="px-2 pt-2">
+    <div class="d-flex align-center px-3 py-3 mb-2" style="background-color: rgba(255,255,255,0.04); border-radius: 8px;">
+        <MudIcon Icon="@Icons.Material.Filled.CorporateFare" Color="Color.Primary" Class="mr-2" Size="Size.Medium" />
+        <div>
+            <MudText Typo="Typo.subtitle2" Style="color: #F8FAFC; font-weight: 700; letter-spacing: 0.5px;">
+                ENTERPRISE ERP
+            </MudText>
+            <MudText Typo="Typo.caption" Style="color: #94A3B8; font-size: 0.72rem;">
+                v1.0.0 &bull; Multi-Tenant Core
+            </MudText>
+        </div>
+    </div>
+
+    <!-- 1. Dashboard -->
+    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">
+        Dashboard Utama
+    </MudNavLink>
+
+    <!-- 2. Master Data -->
+    <MudNavGroup Title="Master Data" Icon="@Icons.Material.Filled.FolderShared" Expanded="true">
+        <MudNavLink Href="/master/companies" Icon="@Icons.Material.Outlined.Business">
+            Perusahaan & Holding
+        </MudNavLink>
+        <MudNavLink Href="/master/branches" Icon="@Icons.Material.Outlined.Store">
+            Kantor Cabang
+        </MudNavLink>
+        <MudNavLink Href="/master/departments" Icon="@Icons.Material.Outlined.Groups">
+            Departemen
+        </MudNavLink>
+        <MudNavLink Href="/master/products" Icon="@Icons.Material.Outlined.Inventory2">
+            Produk & Katalog
+        </MudNavLink>
+        <MudNavLink Href="/master/customers" Icon="@Icons.Material.Outlined.People">
+            Pelanggan (Customers)
+        </MudNavLink>
+        <MudNavLink Href="/master/suppliers" Icon="@Icons.Material.Outlined.LocalShipping">
+            Pemasok (Suppliers)
+        </MudNavLink>
+    </MudNavGroup>
+
+    <!-- 3. Penjualan & Distribusi -->
+    <MudNavGroup Title="Penjualan (Sales)" Icon="@Icons.Material.Filled.ShoppingCart" Expanded="false">
+        <MudNavLink Href="/sales/quotations" Icon="@Icons.Material.Outlined.RequestQuote">
+            Penawaran Harga (SQ)
+        </MudNavLink>
+        <MudNavLink Href="/sales/orders" Icon="@Icons.Material.Outlined.ShoppingCartCheckout">
+            Pesanan Penjualan (SO)
+        </MudNavLink>
+        <MudNavLink Href="/sales/deliveries" Icon="@Icons.Material.Outlined.LocalShipping">
+            Surat Jalan & Pengiriman (DO)
+        </MudNavLink>
+        <MudNavLink Href="/sales/invoices" Icon="@Icons.Material.Outlined.ReceiptLong">
+            Faktur Penjualan (SI)
+        </MudNavLink>
+    </MudNavGroup>
+
+    <!-- 4. Pengadaan (Procurement) -->
+    <MudNavGroup Title="Pengadaan (Procurement)" Icon="@Icons.Material.Filled.ShoppingBag" Expanded="false">
+        <MudNavLink Href="/procurement/requests" Icon="@Icons.Material.Outlined.Assignment">
+            Permintaan Pembelian (PR)
+        </MudNavLink>
+        <MudNavLink Href="/procurement/orders" Icon="@Icons.Material.Outlined.FactCheck">
+            Pesanan Pembelian (PO)
+        </MudNavLink>
+        <MudNavLink Href="/procurement/receipts" Icon="@Icons.Material.Outlined.MoveToInbox">
+            Penerimaan Barang (GRN)
+        </MudNavLink>
+        <MudNavLink Href="/procurement/bills" Icon="@Icons.Material.Outlined.Payment">
+            Tagihan Pemasok (Vendor Bills)
+        </MudNavLink>
+    </MudNavGroup>
+
+    <!-- 5. Persediaan & Gudang -->
+    <MudNavGroup Title="Persediaan (Inventory)" Icon="@Icons.Material.Filled.Warehouse" Expanded="false">
+        <MudNavLink Href="/inventory/stock" Icon="@Icons.Material.Outlined.Layers">
+            Saldo & Kartu Stok
+        </MudNavLink>
+        <MudNavLink Href="/inventory/transfers" Icon="@Icons.Material.Outlined.SwapHoriz">
+            Transfer Antar Gudang
+        </MudNavLink>
+        <MudNavLink Href="/inventory/adjustments" Icon="@Icons.Material.Outlined.Tune">
+            Penyesuaian & Opname
+        </MudNavLink>
+    </MudNavGroup>
+
+    <!-- 6. Keuangan & Akuntansi -->
+    <MudNavGroup Title="Keuangan & Akuntansi" Icon="@Icons.Material.Filled.AccountBalance" Expanded="false">
+        <MudNavLink Href="/finance/chart-of-accounts" Icon="@Icons.Material.Outlined.AccountTree">
+            Bagan Akun (COA)
+        </MudNavLink>
+        <MudNavLink Href="/finance/journals" Icon="@Icons.Material.Outlined.Book">
+            Buku Jurnal Umum
+        </MudNavLink>
+        <MudNavLink Href="/finance/payments" Icon="@Icons.Material.Outlined.AttachMoney">
+            Kas & Bank
+        </MudNavLink>
+        <MudNavLink Href="/finance/period-closing" Icon="@Icons.Material.Outlined.LockClock">
+            Penutupan Periode Fiskal
+        </MudNavLink>
+    </MudNavGroup>
+
+    <!-- 7. SDM & Payroll -->
+    <MudNavGroup Title="Sumber Daya Manusia" Icon="@Icons.Material.Filled.Badge" Expanded="false">
+        <MudNavLink Href="/hr/employees" Icon="@Icons.Material.Outlined.PersonSearch">
+            Master Data Karyawan
+        </MudNavLink>
+        <MudNavLink Href="/hr/attendance" Icon="@Icons.Material.Outlined.AccessTime">
+            Presensi & Kehadiran
+        </MudNavLink>
+        <MudNavLink Href="/hr/leaves" Icon="@Icons.Material.Outlined.EventBusy">
+            Pengajuan & Otorisasi Cuti
+        </MudNavLink>
+        <MudNavLink Href="/hr/payroll" Icon="@Icons.Material.Outlined.MonetizationOn">
+            Proses Payroll Bulanan
+        </MudNavLink>
+    </MudNavGroup>
+
+    <!-- 8. Laporan & Analitik -->
+    <MudNavGroup Title="Laporan & Dokumen" Icon="@Icons.Material.Filled.Assessment" Expanded="false">
+        <MudNavLink Href="/reports/financial" Icon="@Icons.Material.Outlined.BarChart">
+            Laporan Finansial (BS & P&L)
+        </MudNavLink>
+        <MudNavLink Href="/reports/sales" Icon="@Icons.Material.Outlined.TrendingUp">
+            Analitik Omset Penjualan
+        </MudNavLink>
+        <MudNavLink Href="/reports/inventory" Icon="@Icons.Material.Outlined.PieChart">
+            Valuasi & Perputaran Stok
+        </MudNavLink>
+    </MudNavGroup>
+
+    <!-- 9. Keamanan & Pengaturan -->
+    <MudNavGroup Title="Tata Kelola & Akses" Icon="@Icons.Material.Filled.AdminPanelSettings" Expanded="false">
+        <MudNavLink Href="/security/users" Icon="@Icons.Material.Outlined.ManageAccounts">
+            Pengguna & Password
+        </MudNavLink>
+        <MudNavLink Href="/security/roles" Icon="@Icons.Material.Outlined.Security">
+            Role & Matriks Izin (PBAC)
+        </MudNavLink>
+        <MudNavLink Href="/security/audit-logs" Icon="@Icons.Material.Outlined.History">
+            Jejak Audit Sistem
+        </MudNavLink>
+    </MudNavGroup>
+</MudNavMenu>
+

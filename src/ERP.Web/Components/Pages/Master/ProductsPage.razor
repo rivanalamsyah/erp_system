@@ -1,0 +1,401 @@
+@page "/master/products"
+@inject ISender Sender
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IApplicationDbContext DbContext
+@using ERP.Application.Features.Master.Products
+@using ERP.Domain.Entities.Master
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>Master Katalog & Produk — Enterprise ERP</PageTitle>
+
+<div class="mb-4 d-flex justify-space-between align-center">
+    <div>
+        <MudText Typo="Typo.h5" Style="font-weight: 700; color: #0F172A;">
+            Master Produk & Katalog SKU
+        </MudText>
+        <MudText Typo="Typo.body2" Style="color: #64748B;">
+            Kelola barang inventaris, bahan baku, satuan (UoM), serta harga beli dan jual.
+        </MudText>
+    </div>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+        Tambah Produk
+    </MudButton>
+</div>
+
+<MudCard Elevation="1" Class="rounded-lg border border-slate-200">
+    <MudTable ServerData="LoadServerData" @ref="_table" Dense="true" Hover="true" Striped="true" Loading="@_loading">
+        <ToolBarContent>
+            <MudText Typo="Typo.h6" Style="font-weight: 600;">Daftar Produk & SKU</MudText>
+            <MudSpacer />
+            <MudSelect T="Guid?" Label="Filter Kategori" @bind-Value="_selectedCategoryFilter" Dense="true" Margin="Margin.Dense"
+                       Class="mr-3" Style="max-width: 200px;" SelectedValuesChanged="OnFilterChanged" Clearable="true">
+                @foreach (var cat in _categories)
+                {
+                    <MudSelectItem Value="@((Guid?)cat.Id)">@cat.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect T="ProductType?" Label="Tipe Produk" @bind-Value="_selectedTypeFilter" Dense="true" Margin="Margin.Dense"
+                       Class="mr-3" Style="max-width: 160px;" SelectedValuesChanged="OnFilterChanged" Clearable="true">
+                <MudSelectItem Value="@((ProductType?)ProductType.Inventory)">Barang Jadi (FG)</MudSelectItem>
+                <MudSelectItem Value="@((ProductType?)ProductType.RawMaterial)">Bahan Baku (RAW)</MudSelectItem>
+                <MudSelectItem Value="@((ProductType?)ProductType.Service)">Jasa / Layanan</MudSelectItem>
+            </MudSelect>
+            <MudTextField @bind-Value="_searchTerm" Placeholder="Cari SKU, nama..." Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Class="mt-0"
+                          Clearable="true" Immediate="true" OnKeyUp="OnSearch" DebounceInterval="300" />
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>SKU</MudTh>
+            <MudTh>Nama Produk</MudTh>
+            <MudTh>Kategori</MudTh>
+            <MudTh>Satuan</MudTh>
+            <MudTh>Tipe</MudTh>
+            <MudTh Style="text-align: right;">Harga Beli</MudTh>
+            <MudTh Style="text-align: right;">Harga Jual</MudTh>
+            <MudTh Style="text-align: right;">Min Stok</MudTh>
+            <MudTh Style="text-align: center;">Status</MudTh>
+            <MudTh Style="text-align: right;">Aksi</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="SKU">
+                <MudText Typo="Typo.body2" Style="font-family: monospace; font-weight: 600; color: #1E3A8A;">
+                    @context.Sku
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Nama">
+                <MudText Typo="Typo.body2" Style="font-weight: 600;">@context.Name</MudText>
+            </MudTd>
+            <MudTd DataLabel="Kategori">@context.CategoryName</MudTd>
+            <MudTd DataLabel="Satuan">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@context.UomCode</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Tipe">
+                <MudChip T="string" Size="Size.Small" Color="@GetProductTypeColor(context.ProductType)">
+                    @context.ProductType
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Harga Beli" Style="text-align: right; font-family: monospace;">
+                @context.PurchasePrice.ToString("N2")
+            </MudTd>
+            <MudTd DataLabel="Harga Jual" Style="text-align: right; font-family: monospace; font-weight: 600;">
+                @context.SellingPrice.ToString("N2")
+            </MudTd>
+            <MudTd DataLabel="Min Stok" Style="text-align: right;">
+                @context.MinimumStockLevel.ToString("N0")
+            </MudTd>
+            <MudTd DataLabel="Status" Style="text-align: center;">
+                @if (context.IsActive)
+                {
+                    <MudChip T="string" Color="Color.Success" Size="Size.Small">Aktif</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Color="Color.Default" Size="Size.Small">Non-aktif</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Aksi" Style="text-align: right;">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                               OnClick="@(() => OpenEditDialog(context))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => DeleteProductAsync(context))" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <div class="pa-8 text-center">
+                <MudIcon Icon="@Icons.Material.Filled.Inventory2" Size="Size.Large" Color="Color.Default" Class="mb-2" />
+                <MudText Typo="Typo.body1" Style="font-weight: 600;">Belum ada data produk</MudText>
+                <MudText Typo="Typo.body2" Style="color: #64748B;">Klik "Tambah Produk" untuk mendaftarkan barang baru.</MudText>
+            </div>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[] { 10, 25, 50 }" InfoFormat="{first_item}-{last_item} dari {all_items}" />
+        </PagerContent>
+    </MudTable>
+</MudCard>
+
+<!-- Dialog Tambah / Edit Produk -->
+<MudDialog @bind-Visible="_dialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="font-weight: 700;">
+            @(_isEditMode ? "Ubah Data Produk" : "Tambah Produk Baru")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            @if (!_isEditMode)
+            {
+                <div class="d-flex gap-2">
+                    <MudTextField @bind-Value="_model.Sku" Label="Kode SKU (Unik)" Required="true"
+                                  Placeholder="Misal: RAW-STL-001" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-1" />
+                    <MudTextField @bind-Value="_model.Barcode" Label="Barcode / EAN"
+                                  Placeholder="Misal: 8991234567" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-1" />
+                </div>
+            }
+            <MudTextField @bind-Value="_model.Name" Label="Nama Produk" Required="true"
+                          Placeholder="Misal: Plat Besi Baja 10mm" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudTextField @bind-Value="_model.Description" Label="Deskripsi Spesifikasi" Lines="2"
+                          Placeholder="Keterangan teknis..." Variant="Variant.Outlined" Margin="Margin.Dense" />
+
+            <div class="d-flex gap-2">
+                <MudSelect T="Guid" Label="Kategori" @bind-Value="_model.CategoryId" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-1">
+                    @foreach (var c in _categories)
+                    {
+                        <MudSelectItem Value="@c.Id">@c.Name</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudSelect T="Guid" Label="Satuan (UoM)" @bind-Value="_model.UomId" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-1">
+                    @foreach (var u in _uoms)
+                    {
+                        <MudSelectItem Value="@u.Id">@u.Name (@u.Code)</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudSelect T="ProductType" Label="Tipe Produk" @bind-Value="_model.ProductType" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-1">
+                    <MudSelectItem Value="ProductType.Inventory">Barang Jadi</MudSelectItem>
+                    <MudSelectItem Value="ProductType.RawMaterial">Bahan Baku</MudSelectItem>
+                    <MudSelectItem Value="ProductType.Service">Jasa/Layanan</MudSelectItem>
+                </MudSelect>
+            </div>
+
+            <div class="d-flex gap-2">
+                <MudNumericField @bind-Value="_model.PurchasePrice" Label="Harga Beli Standar (Rp)" Format="N2" Min="0m"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-1" />
+                <MudNumericField @bind-Value="_model.SellingPrice" Label="Harga Jual Standar (Rp)" Format="N2" Min="0m"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-1" />
+                <MudNumericField @bind-Value="_model.MinimumStockLevel" Label="Batas Min Stok" Min="0m"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-1" />
+            </div>
+
+            <MudCheckBox @bind-Value="_model.IsActive" Label="Produk Aktif untuk Transaksi" Color="Color.Primary" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _dialogVisible = false">Batal</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveProductAsync" Disabled="_saving">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Menyimpan...</span>
+            }
+            else
+            {
+                <span>Simpan</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private MudTable<ProductDto>? _table;
+    private string? _searchTerm;
+    private Guid? _selectedCategoryFilter;
+    private ProductType? _selectedTypeFilter;
+    private bool _loading;
+    private bool _saving;
+    private bool _dialogVisible;
+    private bool _isEditMode;
+
+    private List<ProductCategory> _categories = [];
+    private List<UnitOfMeasure> _uoms = [];
+    private ProductFormModel _model = new();
+
+    private readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _categories = await DbContext.ProductCategories.IgnoreQueryFilters().OrderBy(c => c.Name).ToListAsync();
+        _uoms = await DbContext.UnitsOfMeasure.IgnoreQueryFilters().OrderBy(u => u.Code).ToListAsync();
+    }
+
+    private async Task<TableData<ProductDto>> LoadServerData(TableState state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            var query = new GetProductsQuery(
+                CategoryId: _selectedCategoryFilter,
+                ProductType: _selectedTypeFilter,
+                SearchTerm: _searchTerm,
+                PageNumber: state.Page + 1,
+                PageSize: state.PageSize);
+
+            var result = await Sender.Send(query, cancellationToken);
+            if (result.IsSuccess)
+            {
+                return new TableData<ProductDto>
+                {
+                    TotalItems = result.Value.TotalCount,
+                    Items = result.Value.Items
+                };
+            }
+
+            Snackbar.Add(result.Error.Description, Severity.Error);
+            return new TableData<ProductDto> { TotalItems = 0, Items = [] };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OnSearch() => _table?.ReloadServerData();
+    private void OnFilterChanged() => _table?.ReloadServerData();
+
+    private Color GetProductTypeColor(ProductType type) => type switch
+    {
+        ProductType.Inventory => Color.Primary,
+        ProductType.RawMaterial => Color.Warning,
+        ProductType.Service => Color.Info,
+        _ => Color.Default
+    };
+
+    private void OpenCreateDialog()
+    {
+        _isEditMode = false;
+        _model = new ProductFormModel
+        {
+            CategoryId = _categories.FirstOrDefault()?.Id ?? Guid.Empty,
+            UomId = _uoms.FirstOrDefault()?.Id ?? Guid.Empty,
+            ProductType = ProductType.Inventory,
+            IsActive = true
+        };
+        _dialogVisible = true;
+    }
+
+    private void OpenEditDialog(ProductDto dto)
+    {
+        _isEditMode = true;
+        _model = new ProductFormModel
+        {
+            Id = dto.Id,
+            CompanyId = dto.CompanyId,
+            CategoryId = dto.CategoryId,
+            UomId = dto.UomId,
+            Sku = dto.Sku,
+            Barcode = dto.Barcode,
+            Name = dto.Name,
+            Description = dto.Description,
+            ProductType = dto.ProductType,
+            PurchasePrice = dto.PurchasePrice,
+            SellingPrice = dto.SellingPrice,
+            MinimumStockLevel = dto.MinimumStockLevel,
+            IsActive = dto.IsActive
+        };
+        _dialogVisible = true;
+    }
+
+    private async Task SaveProductAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_model.Name) || _model.CategoryId == Guid.Empty || _model.UomId == Guid.Empty)
+        {
+            Snackbar.Add("Mohon lengkapi nama produk, kategori, dan satuan.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            if (_isEditMode)
+            {
+                var command = new UpdateProductCommand(
+                    Id: _model.Id!.Value,
+                    CategoryId: _model.CategoryId,
+                    UomId: _model.UomId,
+                    Barcode: _model.Barcode,
+                    Name: _model.Name,
+                    Description: _model.Description,
+                    ProductType: _model.ProductType,
+                    PurchasePrice: _model.PurchasePrice,
+                    SellingPrice: _model.SellingPrice,
+                    MinimumStockLevel: _model.MinimumStockLevel,
+                    IsActive: _model.IsActive);
+
+                var result = await Sender.Send(command);
+                if (result.IsSuccess)
+                {
+                    Snackbar.Add("Data produk berhasil diperbarui.", Severity.Success);
+                    _dialogVisible = false;
+                    _table?.ReloadServerData();
+                }
+                else
+                {
+                    Snackbar.Add(result.Error.Description, Severity.Error);
+                }
+            }
+            else
+            {
+                // Assign to default company if not set
+                var companyId = (await DbContext.Companies.IgnoreQueryFilters().FirstAsync()).Id;
+
+                var command = new CreateProductCommand(
+                    CompanyId: companyId,
+                    CategoryId: _model.CategoryId,
+                    UomId: _model.UomId,
+                    Sku: _model.Sku,
+                    Barcode: _model.Barcode,
+                    Name: _model.Name,
+                    Description: _model.Description,
+                    ProductType: _model.ProductType,
+                    PurchasePrice: _model.PurchasePrice,
+                    SellingPrice: _model.SellingPrice,
+                    MinimumStockLevel: _model.MinimumStockLevel);
+
+                var result = await Sender.Send(command);
+                if (result.IsSuccess)
+                {
+                    Snackbar.Add("Produk baru berhasil disimpan ke database.", Severity.Success);
+                    _dialogVisible = false;
+                    _table?.ReloadServerData();
+                }
+                else
+                {
+                    Snackbar.Add(result.Error.Description, Severity.Error);
+                }
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteProductAsync(ProductDto dto)
+    {
+        bool? confirmed = await DialogService.ShowMessageBoxAsync(
+            "Konfirmasi Hapus Produk",
+            $"Apakah Anda yakin ingin menghapus produk '{dto.Name}' (SKU: {dto.Sku})?",
+            yesText: "Hapus", cancelText: "Batal");
+
+        if (confirmed == true)
+        {
+            var result = await Sender.Send(new DeleteProductCommand(dto.Id));
+            if (result.IsSuccess)
+            {
+                Snackbar.Add("Produk berhasil dihapus.", Severity.Success);
+                _table?.ReloadServerData();
+            }
+            else
+            {
+                Snackbar.Add(result.Error.Description, Severity.Error);
+            }
+        }
+    }
+
+    private class ProductFormModel
+    {
+        public Guid? Id { get; set; }
+        public Guid CompanyId { get; set; }
+        public Guid CategoryId { get; set; }
+        public Guid UomId { get; set; }
+        public string Sku { get; set; } = string.Empty;
+        public string? Barcode { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public ProductType ProductType { get; set; }
+        public decimal PurchasePrice { get; set; }
+        public decimal SellingPrice { get; set; }
+        public decimal MinimumStockLevel { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+}
+

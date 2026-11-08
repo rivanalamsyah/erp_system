@@ -1,0 +1,84 @@
+@page "/login"
+@attribute [AllowAnonymous]
+@layout AuthLayout
+@inject NavigationManager Navigation
+
+<PageTitle>Login — Enterprise ERP</PageTitle>
+
+<div class="d-flex align-center justify-center" style="min-height: 100vh; background: linear-gradient(135deg, #0B1120 0%, #1E293B 100%);">
+    <MudContainer MaxWidth="MaxWidth.ExtraSmall" Class="pa-4">
+        <MudCard Elevation="6" Class="pa-6 rounded-lg" Style="background-color: #FFFFFF;">
+            <div class="text-center mb-6">
+                <div class="d-inline-flex pa-3 rounded-circle mb-3" style="background-color: rgba(30, 58, 138, 0.1);">
+                    <MudIcon Icon="@Icons.Material.Filled.CorporateFare" Color="Color.Primary" Style="font-size: 2.5rem;" />
+                </div>
+                <MudText Typo="Typo.h5" Style="font-weight: 700; color: #0F172A;">
+                    ENTERPRISE ERP
+                </MudText>
+                <MudText Typo="Typo.body2" Style="color: #64748B;">
+                    Masuk ke Sistem Pengelolaan Terpadu
+                </MudText>
+            </div>
+
+            @if (!string.IsNullOrEmpty(ErrorMessage))
+            {
+                <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Dense="true" Class="mb-4">
+                    @ErrorMessage
+                </MudAlert>
+            }
+
+            <form action="/api/auth/login" method="post">
+                <MudStack Spacing="3">
+                    <div>
+                        <label for="email" style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">
+                            Email Korporat
+                        </label>
+                        <input id="email" name="email" type="email" required placeholder="admin@enterprise.erp"
+                               style="width: 100%; padding: 10px 12px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.9rem;" />
+                    </div>
+
+                    <div>
+                        <label for="password" style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">
+                            Kata Sandi
+                        </label>
+                        <input id="password" name="password" type="password" required placeholder="••••••••"
+                               style="width: 100%; padding: 10px 12px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.9rem;" />
+                    </div>
+
+                    <div class="d-flex justify-space-between align-center mt-1">
+                        <label class="d-flex align-center cursor-pointer" style="font-size: 0.85rem; color: #475569;">
+                            <input type="checkbox" name="rememberMe" value="true" class="mr-2" />
+                            Ingat saya di perangkat ini
+                        </label>
+                    </div>
+
+                    <button type="submit"
+                            style="width: 100%; margin-top: 12px; padding: 11px; background-color: #1E3A8A; color: #FFFFFF; border: none; border-radius: 6px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: background 0.2s;"
+                            onmouseover="this.style.backgroundColor='#1E40AF'"
+                            onmouseout="this.style.backgroundColor='#1E3A8A'">
+                        Masuk ke Sistem
+                    </button>
+                </MudStack>
+            </form>
+
+            <div class="mt-6 pt-4 text-center border-t border-slate-200">
+                <MudText Typo="Typo.caption" Style="color: #94A3B8;">
+                    Kredensial Bawaan: <b>admin@enterprise.erp</b> / <b>Admin@12345</b>
+                </MudText>
+            </div>
+        </MudCard>
+    </MudContainer>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    public string? Error { get; set; }
+
+    private string? ErrorMessage => Error switch
+    {
+        "invalid_credentials" => "Email atau kata sandi tidak sesuai, atau akun Anda belum aktif.",
+        "locked_out" => "Akun Anda terkunci sementara karena beberapa kali gagal login. Silakan tunggu 15 menit.",
+        _ => null
+    };
+}
+

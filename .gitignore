@@ -1,0 +1,22 @@
+## .NET build artifacts
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Database & Local Data
+data/
+data/pgdata/
+
+## OS & IDE
+.vscode/
+.idea/
+*.swp
+*~
+Thumbs.db
+[Dd]esktop.ini
+
+## Logs
+*.log

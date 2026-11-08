@@ -1,0 +1,96 @@
+@inherits LayoutComponentBase
+@inject NavigationManager Navigation
+@inject ICurrentUserService CurrentUserService
+@inject IApplicationDbContext DbContext
+
+<MudThemeProvider Theme="@ErpTheme.EnterpriseTheme" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <!-- Top Application Bar -->
+    <MudAppBar Elevation="1" Dense="true" Fixed="true" Style="background-color: #0F172A; border-bottom: 1px solid rgba(255,255,255,0.08);">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@ToggleDrawer" />
+
+        <div class="d-none d-md-flex align-center ml-2">
+            <MudIcon Icon="@Icons.Material.Filled.Business" Size="Size.Small" Class="mr-1 text-slate-400" />
+            <MudText Typo="Typo.subtitle2" Style="color: #F8FAFC; font-weight: 600;">
+                PT Enterprise Sinergi Nusantara
+            </MudText>
+        </div>
+
+        <MudSpacer />
+
+        <!-- Branch Indicator / Switcher -->
+        <div class="d-flex align-center mr-4 px-3 py-1" style="background: rgba(255,255,255,0.07); border-radius: 6px; border: 1px solid rgba(255,255,255,0.12);">
+            <MudIcon Icon="@Icons.Material.Filled.LocationOn" Size="Size.Small" Color="Color.Secondary" Class="mr-1" />
+            <div>
+                <MudText Typo="Typo.caption" Style="color: #94A3B8; font-size: 0.68rem; display: block; line-height: 1;">
+                    CABANG AKTIF
+                </MudText>
+                <MudText Typo="Typo.body2" Style="color: #FFFFFF; font-weight: 600; font-size: 0.8rem; line-height: 1.2;">
+                    HO-JKT &bull; Head Office Jakarta
+                </MudText>
+            </div>
+        </div>
+
+        <!-- Quick Notifications -->
+        <MudBadge Content="3" Color="Color.Warning" Overlap="true" Class="mr-3">
+            <MudIconButton Icon="@Icons.Material.Outlined.Notifications" Color="Color.Inherit" Size="Size.Small" />
+        </MudBadge>
+
+        <!-- User Profile Dropdown -->
+        <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Dense="true">
+            <ActivatorContent>
+                <div class="d-flex align-center cursor-pointer px-2 py-1" style="background: rgba(255,255,255,0.05); border-radius: 20px;">
+                    <MudAvatar Color="Color.Primary" Size="Size.Small" Class="mr-2">SA</MudAvatar>
+                    <div class="d-none d-sm-block text-left mr-1">
+                        <MudText Typo="Typo.body2" Style="color: #FFFFFF; font-weight: 600; font-size: 0.8rem; line-height: 1.1;">
+                            admin@enterprise.erp
+                        </MudText>
+                        <MudText Typo="Typo.caption" Style="color: #38BDF8; font-size: 0.7rem; font-weight: 500;">
+                            SUPER ADMIN
+                        </MudText>
+                    </div>
+                    <MudIcon Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" Style="color: #94A3B8;" />
+                </div>
+            </ActivatorContent>
+            <ChildContent>
+                <MudMenuItem Icon="@Icons.Material.Outlined.Person" Href="/security/profile">
+                    Profil Saya
+                </MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Outlined.LockReset" Href="/security/change-password">
+                    Ganti Password
+                </MudMenuItem>
+                <MudDivider />
+                <form action="/api/auth/logout" method="post">
+                    <button type="submit" style="background: none; border: none; width: 100%; text-align: left; padding: 0;">
+                        <MudMenuItem Icon="@Icons.Material.Outlined.Logout" IconColor="Color.Error">
+                            Keluar (Logout)
+                        </MudMenuItem>
+                    </button>
+                </form>
+            </ChildContent>
+        </MudMenu>
+    </MudAppBar>
+
+    <!-- Sidebar Drawer -->
+    <MudDrawer @bind-Open="@_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2" Variant="DrawerVariant.Responsive" Width="260px" Style="background-color: #0B1120;">
+        <NavMenu />
+    </MudDrawer>
+
+    <!-- Main Workspace Content -->
+    <MudMainContent Class="pa-4 pa-md-6" Style="background-color: #F8FAFC; min-height: 100vh;">
+        @Body
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+
+    private void ToggleDrawer()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+}

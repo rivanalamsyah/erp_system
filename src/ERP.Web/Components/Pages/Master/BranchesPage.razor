@@ -1,0 +1,319 @@
+@page "/master/branches"
+@inject ISender Sender
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IApplicationDbContext DbContext
+@using ERP.Application.Features.Master.Branches
+@using ERP.Domain.Entities.Master
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>Master Cabang — Enterprise ERP</PageTitle>
+
+<div class="mb-4 d-flex justify-space-between align-center">
+    <div>
+        <MudText Typo="Typo.h5" Style="font-weight: 700; color: #0F172A;">
+            Master Kantor Cabang
+        </MudText>
+        <MudText Typo="Typo.body2" Style="color: #64748B;">
+            Kelola kantor pusat, cabang regional, dan perwakilan operasional per perusahaan.
+        </MudText>
+    </div>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+        Tambah Cabang
+    </MudButton>
+</div>
+
+<MudCard Elevation="1" Class="rounded-lg border border-slate-200">
+    <MudTable ServerData="LoadServerData" @ref="_table" Dense="true" Hover="true" Striped="true" Loading="@_loading">
+        <ToolBarContent>
+            <MudText Typo="Typo.h6" Style="font-weight: 600;">Daftar Cabang</MudText>
+            <MudSpacer />
+            <MudSelect T="Guid?" Label="Filter Perusahaan" @bind-Value="_selectedCompanyFilter" Dense="true" Margin="Margin.Dense"
+                       Class="mr-4" Style="max-width: 250px;" SelectedValuesChanged="OnFilterChanged" Clearable="true">
+                @foreach (var c in _companies)
+                {
+                    <MudSelectItem Value="@((Guid?)c.Id)">@c.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudTextField @bind-Value="_searchTerm" Placeholder="Cari kode, nama, kota..." Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Class="mt-0"
+                          Clearable="true" Immediate="true" OnKeyUp="OnSearch" DebounceInterval="300" />
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Kode Cabang</MudTh>
+            <MudTh>Nama Cabang</MudTh>
+            <MudTh>Perusahaan Induk</MudTh>
+            <MudTh>Tipe Kantor</MudTh>
+            <MudTh>Alamat</MudTh>
+            <MudTh>Telepon</MudTh>
+            <MudTh Style="text-align: right;">Aksi</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Kode">
+                <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" Size="Size.Small">
+                    @context.Code
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Nama">
+                <MudText Typo="Typo.body2" Style="font-weight: 600;">@context.Name</MudText>
+            </MudTd>
+            <MudTd DataLabel="Perusahaan">@context.CompanyName</MudTd>
+            <MudTd DataLabel="Tipe">
+                @if (context.IsHeadOffice)
+                {
+                    <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.Star">
+                        Head Office
+                    </MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Color="Color.Default" Size="Size.Small">
+                        Cabang Regional
+                    </MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Alamat">
+                <MudText Typo="Typo.body2" Style="font-size: 0.8rem; color: #475569; max-width: 250px;">
+                    @context.Address
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Telepon">@context.Phone</MudTd>
+            <MudTd DataLabel="Aksi" Style="text-align: right;">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                               OnClick="@(() => OpenEditDialog(context))" />
+                @if (!context.IsHeadOffice)
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                   OnClick="@(() => DeleteBranchAsync(context))" />
+                }
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <div class="pa-8 text-center">
+                <MudIcon Icon="@Icons.Material.Filled.Store" Size="Size.Large" Color="Color.Default" Class="mb-2" />
+                <MudText Typo="Typo.body1" Style="font-weight: 600;">Belum ada cabang terdaftar</MudText>
+            </div>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[] { 10, 25, 50 }" InfoFormat="{first_item}-{last_item} dari {all_items}" />
+        </PagerContent>
+    </MudTable>
+</MudCard>
+
+<!-- Dialog Tambah/Edit Cabang -->
+<MudDialog @bind-Visible="_dialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="font-weight: 700;">
+            @(_isEditMode ? "Ubah Data Cabang" : "Tambah Cabang Baru")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            @if (!_isEditMode)
+            {
+                <MudSelect T="Guid" Label="Perusahaan Induk" @bind-Value="_model.CompanyId" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (var c in _companies)
+                    {
+                        <MudSelectItem Value="@c.Id">@c.Name (@c.Code)</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudTextField @bind-Value="_model.Code" Label="Kode Cabang (Unik)" Required="true"
+                              Placeholder="Misal: BR-SBY" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            }
+            <MudTextField @bind-Value="_model.Name" Label="Nama Cabang" Required="true"
+                          Placeholder="Misal: Cabang Surabaya" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudTextField @bind-Value="_model.Address" Label="Alamat Kantor Cabang" Lines="2"
+                          Placeholder="Alamat lokasi..." Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudTextField @bind-Value="_model.Phone" Label="Nomor Telepon Cabang"
+                          Placeholder="+62 31..." Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudCheckBox @bind-Value="_model.IsHeadOffice" Label="Tandai sebagai Kantor Pusat (Head Office)" Color="Color.Primary" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _dialogVisible = false">Batal</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveBranchAsync" Disabled="_saving">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Menyimpan...</span>
+            }
+            else
+            {
+                <span>Simpan</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private MudTable<BranchDto>? _table;
+    private string? _searchTerm;
+    private Guid? _selectedCompanyFilter;
+    private bool _loading;
+    private bool _saving;
+    private bool _dialogVisible;
+    private bool _isEditMode;
+    private List<Company> _companies = [];
+    private BranchFormModel _model = new();
+
+    private readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _companies = await DbContext.Companies.IgnoreQueryFilters().OrderBy(c => c.Name).ToListAsync();
+    }
+
+    private async Task<TableData<BranchDto>> LoadServerData(TableState state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            var query = new GetBranchesQuery(
+                CompanyId: _selectedCompanyFilter,
+                SearchTerm: _searchTerm,
+                PageNumber: state.Page + 1,
+                PageSize: state.PageSize);
+
+            var result = await Sender.Send(query, cancellationToken);
+            if (result.IsSuccess)
+            {
+                return new TableData<BranchDto>
+                {
+                    TotalItems = result.Value.TotalCount,
+                    Items = result.Value.Items
+                };
+            }
+
+            Snackbar.Add(result.Error.Description, Severity.Error);
+            return new TableData<BranchDto> { TotalItems = 0, Items = [] };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OnSearch() => _table?.ReloadServerData();
+    private void OnFilterChanged() => _table?.ReloadServerData();
+
+    private void OpenCreateDialog()
+    {
+        _isEditMode = false;
+        _model = new BranchFormModel
+        {
+            CompanyId = _companies.FirstOrDefault()?.Id ?? Guid.Empty
+        };
+        _dialogVisible = true;
+    }
+
+    private void OpenEditDialog(BranchDto dto)
+    {
+        _isEditMode = true;
+        _model = new BranchFormModel
+        {
+            Id = dto.Id,
+            CompanyId = dto.CompanyId,
+            Code = dto.Code,
+            Name = dto.Name,
+            Address = dto.Address,
+            Phone = dto.Phone,
+            IsHeadOffice = dto.IsHeadOffice
+        };
+        _dialogVisible = true;
+    }
+
+    private async Task SaveBranchAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_model.Name))
+        {
+            Snackbar.Add("Nama cabang wajib diisi.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            if (_isEditMode)
+            {
+                var command = new UpdateBranchCommand(
+                    Id: _model.Id!.Value,
+                    Name: _model.Name,
+                    Address: _model.Address,
+                    Phone: _model.Phone,
+                    IsHeadOffice: _model.IsHeadOffice);
+
+                var result = await Sender.Send(command);
+                if (result.IsSuccess)
+                {
+                    Snackbar.Add("Cabang berhasil diperbarui.", Severity.Success);
+                    _dialogVisible = false;
+                    _table?.ReloadServerData();
+                }
+                else
+                {
+                    Snackbar.Add(result.Error.Description, Severity.Error);
+                }
+            }
+            else
+            {
+                var command = new CreateBranchCommand(
+                    CompanyId: _model.CompanyId,
+                    Code: _model.Code,
+                    Name: _model.Name,
+                    Address: _model.Address,
+                    Phone: _model.Phone,
+                    IsHeadOffice: _model.IsHeadOffice);
+
+                var result = await Sender.Send(command);
+                if (result.IsSuccess)
+                {
+                    Snackbar.Add("Cabang baru berhasil dibuat.", Severity.Success);
+                    _dialogVisible = false;
+                    _table?.ReloadServerData();
+                }
+                else
+                {
+                    Snackbar.Add(result.Error.Description, Severity.Error);
+                }
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteBranchAsync(BranchDto dto)
+    {
+        bool? confirmed = await DialogService.ShowMessageBoxAsync(
+            "Konfirmasi Hapus",
+            $"Apakah Anda yakin ingin menghapus cabang '{dto.Name}' ({dto.Code})?",
+            yesText: "Hapus", cancelText: "Batal");
+
+        if (confirmed == true)
+        {
+            var result = await Sender.Send(new DeleteBranchCommand(dto.Id));
+            if (result.IsSuccess)
+            {
+                Snackbar.Add("Cabang berhasil dihapus.", Severity.Success);
+                _table?.ReloadServerData();
+            }
+            else
+            {
+                Snackbar.Add(result.Error.Description, Severity.Error);
+            }
+        }
+    }
+
+    private class BranchFormModel
+    {
+        public Guid? Id { get; set; }
+        public Guid CompanyId { get; set; }
+        public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string? Address { get; set; }
+        public string? Phone { get; set; }
+        public bool IsHeadOffice { get; set; }
+    }
+}
+

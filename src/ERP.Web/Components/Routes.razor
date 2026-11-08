@@ -1,0 +1,25 @@
+<Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+    <Found Context="routeData">
+        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+            <NotAuthorized>
+                <div class="d-flex flex-column align-center justify-center pa-12" style="min-height: 50vh;">
+                    <MudIcon Icon="@Icons.Material.Filled.GppBad" Color="Color.Error" Size="Size.Large" Style="font-size: 4rem;" Class="mb-4" />
+                    <MudText Typo="Typo.h5" GutterBottom="true" Style="font-weight: 700;">Akses Tidak Diizinkan</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-6 text-center" Style="color: #64748B; max-width: 480px;">
+                        Akun Anda tidak memiliki izin operasi (Permission) yang sesuai untuk mengakses modul ini. Silakan hubungi Administrator jika ini merupakan sebuah kesalahan.
+                    </MudText>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/">
+                        Kembali ke Dashboard
+                    </MudButton>
+                </div>
+            </NotAuthorized>
+            <Authorizing>
+                <div class="d-flex flex-column align-center justify-center pa-12" style="min-height: 50vh;">
+                    <MudProgressCircular Indeterminate="true" Color="Color.Primary" Size="Size.Large" Class="mb-4" />
+                    <MudText Typo="Typo.body2" Style="color: #64748B;">Memverifikasi kredensial & otorisasi...</MudText>
+                </div>
+            </Authorizing>
+        </AuthorizeRouteView>
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+</Router>
