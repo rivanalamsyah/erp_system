@@ -6,6 +6,7 @@ using ERP.Domain.Entities.Audit;
 using ERP.Domain.Entities.Inventory;
 using ERP.Domain.Entities.Master;
 using ERP.Domain.Entities.Procurement;
+using ERP.Domain.Entities.Sales;
 using ERP.Infrastructure.Identity.Models;
 using ERP.Infrastructure.Persistence.Interceptors;
 
@@ -45,6 +46,15 @@ public class ApplicationDbContext(
     public DbSet<GoodsReceipt> GoodsReceipts => Set<GoodsReceipt>();
     public DbSet<GoodsReceiptItem> GoodsReceiptItems => Set<GoodsReceiptItem>();
     public DbSet<VendorBill> VendorBills => Set<VendorBill>();
+
+    // Sales
+    public DbSet<Quotation> Quotations => Set<Quotation>();
+    public DbSet<QuotationItem> QuotationItems => Set<QuotationItem>();
+    public DbSet<SalesOrder> SalesOrders => Set<SalesOrder>();
+    public DbSet<SalesOrderItem> SalesOrderItems => Set<SalesOrderItem>();
+    public DbSet<Delivery> Deliveries => Set<Delivery>();
+    public DbSet<DeliveryItem> DeliveryItems => Set<DeliveryItem>();
+    public DbSet<SalesInvoice> SalesInvoices => Set<SalesInvoice>();
 
     // Identity Custom Tables
     public DbSet<Permission> Permissions => Set<Permission>();
@@ -424,7 +434,108 @@ public class ApplicationDbContext(
             b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
         });
 
-        // 5. Pemetaan Schema Audit
+        // 5. Pemetaan Schema Sales
+        builder.Entity<Quotation>(b =>
+        {
+            b.ToTable("quotations", "sales");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => x.QuotationNumber).IsUnique();
+            b.Property(x => x.Status).HasConversion<string>();
+            b.Property(x => x.SubtotalAmount).HasPrecision(18, 2);
+            b.Property(x => x.TaxAmount).HasPrecision(18, 2);
+            b.Property(x => x.TotalAmount).HasPrecision(18, 2);
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            b.Property(x => x.Version).IsRowVersion();
+            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+        });
+
+        builder.Entity<QuotationItem>(b =>
+        {
+            b.ToTable("quotation_items", "sales");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Quantity).HasPrecision(14, 4);
+            b.Property(x => x.UnitPrice).HasPrecision(18, 4);
+            b.Property(x => x.DiscountRate).HasPrecision(5, 2);
+            b.Property(x => x.LineTotal).HasPrecision(18, 2);
+            b.HasOne(x => x.Quotation).WithMany(q => q.Items).HasForeignKey(x => x.QuotationId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<SalesOrder>(b =>
+        {
+            b.ToTable("sales_orders", "sales");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => x.OrderNumber).IsUnique();
+            b.Property(x => x.Status).HasConversion<string>();
+            b.Property(x => x.SubtotalAmount).HasPrecision(18, 2);
+            b.Property(x => x.TaxAmount).HasPrecision(18, 2);
+            b.Property(x => x.TotalAmount).HasPrecision(18, 2);
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Quotation).WithMany().HasForeignKey(x => x.QuotationId).OnDelete(DeleteBehavior.SetNull);
+            b.Property(x => x.Version).IsRowVersion();
+            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+        });
+
+        builder.Entity<SalesOrderItem>(b =>
+        {
+            b.ToTable("sales_order_items", "sales");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Quantity).HasPrecision(14, 4);
+            b.Property(x => x.ShippedQuantity).HasPrecision(14, 4);
+            b.Property(x => x.UnitPrice).HasPrecision(18, 4);
+            b.Property(x => x.DiscountRate).HasPrecision(5, 2);
+            b.Property(x => x.LineTotal).HasPrecision(18, 2);
+            b.HasOne(x => x.SalesOrder).WithMany(s => s.Items).HasForeignKey(x => x.SalesOrderId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<Delivery>(b =>
+        {
+            b.ToTable("deliveries", "sales");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => x.DeliveryNumber).IsUnique();
+            b.Property(x => x.Status).HasConversion<string>();
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.SalesOrder).WithMany().HasForeignKey(x => x.SalesOrderId).OnDelete(DeleteBehavior.Restrict);
+            b.Property(x => x.Version).IsRowVersion();
+            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+        });
+
+        builder.Entity<DeliveryItem>(b =>
+        {
+            b.ToTable("delivery_items", "sales");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.QuantityShipped).HasPrecision(14, 4);
+            b.HasOne(x => x.Delivery).WithMany(d => d.Items).HasForeignKey(x => x.DeliveryId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.SalesOrderItem).WithMany().HasForeignKey(x => x.SoItemId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<SalesInvoice>(b =>
+        {
+            b.ToTable("sales_invoices", "sales");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => x.InvoiceNumber).IsUnique();
+            b.Property(x => x.Status).HasConversion<string>();
+            b.Property(x => x.SubtotalAmount).HasPrecision(18, 2);
+            b.Property(x => x.TaxAmount).HasPrecision(18, 2);
+            b.Property(x => x.TotalAmount).HasPrecision(18, 2);
+            b.Property(x => x.PaidAmount).HasPrecision(18, 2);
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.SalesOrder).WithMany().HasForeignKey(x => x.SalesOrderId).OnDelete(DeleteBehavior.Restrict);
+            b.Property(x => x.Version).IsRowVersion();
+            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+        });
+
+        // 6. Pemetaan Schema Audit
         builder.Entity<AuditLog>(b =>
         {
             b.ToTable("audit_logs", "audit");

@@ -1,0 +1,324 @@
+@page "/sales/invoices"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject ISender Mediator
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject ICurrentUserService CurrentUser
+@inject IApplicationDbContext DbContext
+
+<PageTitle>Faktur Penjualan (Sales Invoices) - Enterprise ERP</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-6 mb-8">
+    <div class="d-flex justify-space-between align-center mb-6">
+        <div>
+            <MudText Typo="Typo.h5" Class="fw-bold">Faktur Penjualan (Sales Invoices)</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Kelola penagihan piutang dagang (Accounts Receivable) dan penerbitan faktur pajak ke pelanggan
+            </MudText>
+        </div>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="OpenCreateDialog">
+            Terbitkan Faktur Baru
+        </MudButton>
+    </div>
+
+    <MudCard Elevation="2" Class="erp-card">
+        <MudCardContent>
+            <div class="d-flex gap-4 mb-4">
+                <MudTextField @bind-Value="_searchTerm"
+                              Placeholder="Cari nomor faktur, no. seri faktur pajak, atau pelanggan..."
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              IconSize="Size.Medium"
+                              Class="mt-0"
+                              Immediate="true"
+                              OnKeyUp="OnSearchKeyUp" />
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="LoadData">
+                    Refresh
+                </MudButton>
+            </div>
+
+            <MudTable Items="@_invoices"
+                      Loading="@_loading"
+                      Hover="true"
+                      Striped="true"
+                      Dense="true"
+                      Elevation="0">
+                <HeaderContent>
+                    <MudTh>No. Faktur</MudTh>
+                    <MudTh>Faktur Pajak</MudTh>
+                    <MudTh>Pelanggan</MudTh>
+                    <MudTh>Ref. SO</MudTh>
+                    <MudTh>Tgl Faktur</MudTh>
+                    <MudTh>Jatuh Tempo</MudTh>
+                    <MudTh Style="text-align: right;">Total Nilai</MudTh>
+                    <MudTh Style="text-align: right;">Sisa Piutang</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh Style="text-align: right;">Aksi</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="No. Faktur">
+                        <MudText Typo="Typo.body2" Class="fw-bold text-primary">@context.InvoiceNumber</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Faktur Pajak">@(string.IsNullOrWhiteSpace(context.TaxInvoiceNumber) ? "-" : context.TaxInvoiceNumber)</MudTd>
+                    <MudTd DataLabel="Pelanggan">@context.CustomerName</MudTd>
+                    <MudTd DataLabel="Ref. SO">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default">@context.OrderNumber</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Tgl Faktur">@context.InvoiceDate.ToString("dd/MM/yyyy")</MudTd>
+                    <MudTd DataLabel="Jatuh Tempo">@context.DueDate.ToString("dd/MM/yyyy")</MudTd>
+                    <MudTd DataLabel="Total Nilai" Style="text-align: right;">
+                        Rp @context.TotalAmount.ToString("N0")
+                    </MudTd>
+                    <MudTd DataLabel="Sisa Piutang" Style="text-align: right;">
+                        <MudText Typo="Typo.body2" Class="fw-bold" Color="@(context.RemainingAmount > 0 ? Color.Error : Color.Success)">
+                            Rp @context.RemainingAmount.ToString("N0")
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
+                            @context.Status
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Aksi" Style="text-align: right;">
+                        @if (context.Status == "Draft")
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.CheckCircle"
+                                           Size="Size.Small"
+                                           Color="Color.Success"
+                                           OnClick="@(() => PostInvoice(context))" />
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Typo="Typo.body2" Align="Align.Center" Class="py-6">Belum ada data Faktur Penjualan.</MudText>
+                </NoRecordsContent>
+            </MudTable>
+
+            <div class="d-flex justify-end mt-4">
+                <MudPagination Count="@_totalPages"
+                               Selected="@_currentPage"
+                               SelectedChanged="OnPageChanged"
+                               Color="Color.Primary" />
+            </div>
+        </MudCardContent>
+    </MudCard>
+</MudContainer>
+
+@* Create Dialog *@
+<MudDialog @bind-Visible="_createOpen" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Penerbitan Faktur Penjualan Baru</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudSelect T="Guid" Label="Pilih Sales Order" Value="_formSoId" ValueChanged="OnSoSelected" Required="true">
+                    @foreach (var so in _availableSos)
+                    {
+                        <MudSelectItem Value="@so.Id">@so.OrderNumber - @so.CustomerName (Rp @so.TotalAmount.ToString("N0"))</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_formTaxInvoiceNumber" Label="Nomor Seri Faktur Pajak (NSFP)" Placeholder="010.000-26.00000001" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker Label="Tanggal Faktur" @bind-Date="_formInvoiceDate" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker Label="Tanggal Jatuh Tempo" @bind-Date="_formDueDate" />
+            </MudItem>
+            @if (_selectedSoSummary != null)
+            {
+                <MudItem xs="12">
+                    <MudAlert Severity="Severity.Normal" Dense="true">
+                        Total Nilai Faktur: <strong>Rp @_selectedSoSummary.TotalAmount.ToString("N0")</strong> (Pelanggan: @_selectedSoSummary.CustomerName)
+                    </MudAlert>
+                </MudItem>
+            }
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _createOpen = false)">Batal</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveCreate">Simpan Faktur</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<SalesInvoiceDto> _invoices = [];
+    private bool _loading = true;
+    private string _searchTerm = string.Empty;
+    private int _currentPage = 1;
+    private int _pageSize = 10;
+    private int _totalPages = 1;
+
+    private bool _createOpen = false;
+    private Guid _formSoId;
+    private string? _formTaxInvoiceNumber;
+    private DateTime? _formInvoiceDate = DateTime.Today;
+    private DateTime? _formDueDate = DateTime.Today.AddDays(30);
+
+    private List<SoBillingSummary> _availableSos = [];
+    private SoBillingSummary? _selectedSoSummary;
+
+    private readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Small, FullWidth = true };
+
+    public record SoBillingSummary(Guid Id, string OrderNumber, string CustomerName, decimal TotalAmount);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAvailableSos();
+        await LoadData();
+    }
+
+    private async Task LoadAvailableSos()
+    {
+        _availableSos = await DbContext.SalesOrders
+            .AsNoTracking()
+            .Where(s => (s.Status == SalesOrderStatus.Confirmed || s.Status == SalesOrderStatus.FullyShipped || s.Status == SalesOrderStatus.PartiallyShipped))
+            .OrderByDescending(s => s.OrderDate)
+            .Select(s => new SoBillingSummary(s.Id, s.OrderNumber, s.Customer.Name, s.TotalAmount))
+            .ToListAsync();
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        try
+        {
+            var result = await Mediator.Send(new GetSalesInvoicesQuery(
+                SearchTerm: _searchTerm,
+                PageNumber: _currentPage,
+                PageSize: _pageSize));
+
+            if (result.IsSuccess)
+            {
+                _invoices = result.Value.Items.ToList();
+                _totalPages = (int)Math.Ceiling((double)result.Value.TotalCount / _pageSize);
+            }
+            else
+            {
+                Snackbar.Add(result.Error.Description, Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Gagal memuat Faktur Penjualan: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _currentPage = 1;
+            await LoadData();
+        }
+    }
+
+    private async Task OnPageChanged(int page)
+    {
+        _currentPage = page;
+        await LoadData();
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        await LoadAvailableSos();
+        _formSoId = _availableSos.FirstOrDefault()?.Id ?? Guid.Empty;
+        _formTaxInvoiceNumber = string.Empty;
+        _formInvoiceDate = DateTime.Today;
+        _formDueDate = DateTime.Today.AddDays(30);
+        _selectedSoSummary = _availableSos.FirstOrDefault();
+        _createOpen = true;
+    }
+
+    private void OnSoSelected(Guid soId)
+    {
+        _formSoId = soId;
+        _selectedSoSummary = _availableSos.FirstOrDefault(s => s.Id == soId);
+    }
+
+    private async Task SaveCreate()
+    {
+        if (_formSoId == Guid.Empty)
+        {
+            Snackbar.Add("Mohon pilih Sales Order yang akan difakturkan.", Severity.Warning);
+            return;
+        }
+
+        var company = await DbContext.Companies.FirstOrDefaultAsync();
+        var branch = await DbContext.Branches.FirstOrDefaultAsync();
+
+        if (company == null || branch == null)
+        {
+            Snackbar.Add("Master Company / Branch belum terkonfigurasi.", Severity.Error);
+            return;
+        }
+
+        var command = new CreateSalesInvoiceCommand(
+            CompanyId: company.Id,
+            BranchId: branch.Id,
+            SalesOrderId: _formSoId,
+            TaxInvoiceNumber: _formTaxInvoiceNumber,
+            InvoiceDate: DateOnly.FromDateTime(_formInvoiceDate ?? DateTime.Today),
+            DueDate: DateOnly.FromDateTime(_formDueDate ?? DateTime.Today.AddDays(30))
+        );
+
+        var result = await Mediator.Send(command);
+        if (result.IsSuccess)
+        {
+            Snackbar.Add("Faktur Penjualan berhasil diterbitkan.", Severity.Success);
+            _createOpen = false;
+            await LoadData();
+        }
+        else
+        {
+            Snackbar.Add(result.Error.Description, Severity.Error);
+        }
+    }
+
+    private async Task PostInvoice(SalesInvoiceDto invoice)
+    {
+        var confirm = await DialogService.ShowMessageBoxAsync(
+            "Konfirmasi Posting Faktur",
+            $"Posting faktur {invoice.InvoiceNumber} senilai Rp {invoice.TotalAmount:N0} ke buku besar Piutang Usaha (AR)?",
+            yesText: "Posting Faktur",
+            cancelText: "Batal");
+
+        if (confirm == true)
+        {
+            var result = await Mediator.Send(new PostSalesInvoiceCommand(invoice.Id));
+            if (result.IsSuccess)
+            {
+                Snackbar.Add($"Faktur {invoice.InvoiceNumber} berhasil diposting.", Severity.Success);
+                await LoadData();
+            }
+            else
+            {
+                Snackbar.Add(result.Error.Description, Severity.Error);
+            }
+        }
+    }
+
+    private Color GetStatusColor(string status) => status switch
+    {
+        "Draft" => Color.Default,
+        "Posted" => Color.Warning,
+        "PartiallyPaid" => Color.Info,
+        "Paid" => Color.Success,
+        "Cancelled" => Color.Error,
+        _ => Color.Default
+    };
+}

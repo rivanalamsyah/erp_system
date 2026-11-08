@@ -37,6 +37,15 @@ public interface IApplicationDbContext
     DbSet<GoodsReceiptItem> GoodsReceiptItems { get; }
     DbSet<VendorBill> VendorBills { get; }
 
+    // Sales
+    DbSet<ERP.Domain.Entities.Sales.Quotation> Quotations { get; }
+    DbSet<ERP.Domain.Entities.Sales.QuotationItem> QuotationItems { get; }
+    DbSet<ERP.Domain.Entities.Sales.SalesOrder> SalesOrders { get; }
+    DbSet<ERP.Domain.Entities.Sales.SalesOrderItem> SalesOrderItems { get; }
+    DbSet<ERP.Domain.Entities.Sales.Delivery> Deliveries { get; }
+    DbSet<ERP.Domain.Entities.Sales.DeliveryItem> DeliveryItems { get; }
+    DbSet<ERP.Domain.Entities.Sales.SalesInvoice> SalesInvoices { get; }
+
     // Audit
     DbSet<AuditLog> AuditLogs { get; }
 

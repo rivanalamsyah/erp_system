@@ -1,0 +1,485 @@
+@page "/sales/orders"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject ISender Mediator
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject ICurrentUserService CurrentUser
+@inject IApplicationDbContext DbContext
+
+<PageTitle>Sales Orders - Enterprise ERP</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-6 mb-8">
+    <div class="d-flex justify-space-between align-center mb-6">
+        <div>
+            <MudText Typo="Typo.h5" Class="fw-bold">Pesanan Penjualan (Sales Order)</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Kelola konfirmasi pesanan pelanggan, pengecekan plafon kredit, dan reservasi persediaan barang
+            </MudText>
+        </div>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="OpenCreateDialog">
+            Buat SO Baru
+        </MudButton>
+    </div>
+
+    <MudCard Elevation="2" Class="erp-card">
+        <MudCardContent>
+            <div class="d-flex gap-4 mb-4">
+                <MudTextField @bind-Value="_searchTerm"
+                              Placeholder="Cari nomor SO atau pelanggan..."
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              IconSize="Size.Medium"
+                              Class="mt-0"
+                              Immediate="true"
+                              OnKeyUp="OnSearchKeyUp" />
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="LoadData">
+                    Refresh
+                </MudButton>
+            </div>
+
+            <MudTable Items="@_orders"
+                      Loading="@_loading"
+                      Hover="true"
+                      Striped="true"
+                      Dense="true"
+                      Elevation="0">
+                <HeaderContent>
+                    <MudTh>No. SO</MudTh>
+                    <MudTh>Pelanggan</MudTh>
+                    <MudTh>Ref. Penawaran</MudTh>
+                    <MudTh>Tgl Pesanan</MudTh>
+                    <MudTh>Est. Pengiriman</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh Style="text-align: right;">Subtotal</MudTh>
+                    <MudTh Style="text-align: right;">PPN (11%)</MudTh>
+                    <MudTh Style="text-align: right;">Total Nilai SO</MudTh>
+                    <MudTh Style="text-align: right;">Aksi</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="No. SO">
+                        <MudText Typo="Typo.body2" Class="fw-bold text-primary">@context.OrderNumber</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Pelanggan">@context.CustomerName</MudTd>
+                    <MudTd DataLabel="Ref. SQ">
+                        @(string.IsNullOrWhiteSpace(context.QuotationNumber) ? "-" : context.QuotationNumber)
+                    </MudTd>
+                    <MudTd DataLabel="Tgl Pesanan">@context.OrderDate.ToString("dd/MM/yyyy")</MudTd>
+                    <MudTd DataLabel="Est. Pengiriman">@(context.ExpectedDeliveryDate?.ToString("dd/MM/yyyy") ?? "-")</MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
+                            @context.Status
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Subtotal" Style="text-align: right;">Rp @context.SubtotalAmount.ToString("N0")</MudTd>
+                    <MudTd DataLabel="PPN" Style="text-align: right;">Rp @context.TaxAmount.ToString("N0")</MudTd>
+                    <MudTd DataLabel="Total Nilai SO" Style="text-align: right;">
+                        <MudText Typo="Typo.body2" Class="fw-bold">
+                            Rp @context.TotalAmount.ToString("N0")
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Aksi" Style="text-align: right;">
+                        <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                                       Size="Size.Small"
+                                       Color="Color.Info"
+                                       OnClick="@(() => ShowDetails(context))" />
+                        @if (context.Status == "Draft")
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.CheckCircle"
+                                           Size="Size.Small"
+                                           Color="Color.Success"
+                                           OnClick="@(() => OpenConfirmDialog(context))" />
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Typo="Typo.body2" Align="Align.Center" Class="py-6">Belum ada data Sales Order.</MudText>
+                </NoRecordsContent>
+            </MudTable>
+
+            <div class="d-flex justify-end mt-4">
+                <MudPagination Count="@_totalPages"
+                               Selected="@_currentPage"
+                               SelectedChanged="OnPageChanged"
+                               Color="Color.Primary" />
+            </div>
+        </MudCardContent>
+    </MudCard>
+</MudContainer>
+
+@* Detail Dialog *@
+<MudDialog @bind-Visible="_detailsOpen" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Detail SO: @_selectedOrder?.OrderNumber - @_selectedOrder?.CustomerName</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_selectedOrder != null)
+        {
+            <MudTable Items="@_selectedOrder.Items" Dense="true" Elevation="0">
+                <HeaderContent>
+                    <MudTh>SKU</MudTh>
+                    <MudTh>Nama Produk</MudTh>
+                    <MudTh>Satuan</MudTh>
+                    <MudTh Style="text-align: right;">Qty Dipesan</MudTh>
+                    <MudTh Style="text-align: right;">Qty Terkirim</MudTh>
+                    <MudTh Style="text-align: right;">Harga Satuan</MudTh>
+                    <MudTh Style="text-align: right;">Diskon %</MudTh>
+                    <MudTh Style="text-align: right;">Total Baris</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.ProductSku</MudTd>
+                    <MudTd>@context.ProductName</MudTd>
+                    <MudTd>@context.UomCode</MudTd>
+                    <MudTd Style="text-align: right;">@context.Quantity.ToString("N2")</MudTd>
+                    <MudTd Style="@($"text-align: right; color: {(context.ShippedQuantity >= context.Quantity ? "green" : "orange")};")">
+                        @context.ShippedQuantity.ToString("N2")
+                    </MudTd>
+                    <MudTd Style="text-align: right;">Rp @context.UnitPrice.ToString("N0")</MudTd>
+                    <MudTd Style="text-align: right;">@context.DiscountRate.ToString("N1")%</MudTd>
+                    <MudTd Style="text-align: right;" Class="fw-semibold">Rp @context.LineTotal.ToString("N0")</MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" OnClick="@(() => _detailsOpen = false)">Tutup</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@* Confirm Order Dialog *@
+<MudDialog @bind-Visible="_confirmOpen" Options="_smallDialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Konfirmasi Sales Order: @_orderToConfirm?.OrderNumber</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Pilih gudang pemenuhan stok pesanan ini untuk validasi ketersediaan stok fisik dan reservasi persediaan (No Overselling Rule - BR-SALES-002):
+        </MudText>
+        <MudSelect T="Guid" Label="Gudang Pemenuhan Stok" @bind-Value="_confirmWarehouseId" Required="true">
+            @foreach (var wh in _availableWarehouses)
+            {
+                <MudSelectItem Value="@wh.Id">@wh.Name (@wh.Code)</MudSelectItem>
+            }
+        </MudSelect>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _confirmOpen = false)">Batal</MudButton>
+        <MudButton Color="Color.Success" Variant="Variant.Filled" OnClick="ExecuteConfirmOrder">Konfirmasi Order</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@* Create Dialog *@
+<MudDialog @bind-Visible="_createOpen" Options="_largeDialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Buat Sales Order Baru</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="Guid" Label="Pelanggan / Customer" @bind-Value="_formCustomerId" Required="true">
+                    @foreach (var c in _availableCustomers)
+                    {
+                        <MudSelectItem Value="@c.Id">@c.Name (@c.Code) - Plafon Kredit: Rp @c.CreditLimit.ToString("N0")</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="3">
+                <MudDatePicker Label="Tanggal Pesanan" @bind-Date="_formOrderDate" />
+            </MudItem>
+            <MudItem xs="12" sm="3">
+                <MudDatePicker Label="Est. Tanggal Pengiriman" @bind-Date="_formExpectedDeliveryDate" />
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudDivider Class="my-2" />
+                <div class="d-flex justify-space-between align-center mb-2">
+                    <MudText Typo="Typo.subtitle1" Class="fw-bold">Item Produk SO</MudText>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Add" OnClick="AddFormLine">
+                        Tambah Baris
+                    </MudButton>
+                </div>
+
+                @foreach (var line in _formLines)
+                {
+                    <div class="d-flex gap-2 align-center mb-2">
+                        <MudSelect T="Guid" Label="Produk" Value="line.ProductId" ValueChanged="@((Guid id) => OnProductSelected(line, id))" Dense="true" Style="min-width: 220px;">
+                            @foreach (var prod in _availableProducts)
+                            {
+                                <MudSelectItem Value="@prod.Id">@prod.Name (@prod.Sku)</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudNumericField T="decimal" Label="Qty" @bind-Value="line.Quantity" Min="0.01m" Style="width: 80px;" />
+                        <MudNumericField T="decimal" Label="Harga Jual" @bind-Value="line.UnitPrice" Min="0m" Style="width: 140px;" />
+                        <MudNumericField T="decimal" Label="Disc %" @bind-Value="line.DiscountRate" Min="0m" Max="100m" Style="width: 80px;" />
+                        <MudText Typo="Typo.body2" Class="fw-semibold px-2" Style="min-width: 120px; text-align: right;">
+                            Rp @((line.Quantity * line.UnitPrice * (1 - (line.DiscountRate / 100m))).ToString("N0"))
+                        </MudText>
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                       OnClick="@(() => _formLines.Remove(line))" Disabled="@(_formLines.Count <= 1)" />
+                    </div>
+                }
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _createOpen = false)">Batal</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveCreate">Simpan SO</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<SalesOrderDto> _orders = [];
+    private bool _loading = true;
+    private string _searchTerm = string.Empty;
+    private int _currentPage = 1;
+    private int _pageSize = 10;
+    private int _totalPages = 1;
+
+    private bool _detailsOpen = false;
+    private SalesOrderDto? _selectedOrder;
+
+    private bool _confirmOpen = false;
+    private SalesOrderDto? _orderToConfirm;
+    private Guid _confirmWarehouseId;
+
+    private bool _createOpen = false;
+    private Guid _formCustomerId;
+    private DateTime? _formOrderDate = DateTime.Today;
+    private DateTime? _formExpectedDeliveryDate = DateTime.Today.AddDays(7);
+    private List<CreateSoLineModel> _formLines = [];
+
+    private List<CustomerSummary> _availableCustomers = [];
+    private List<ProductSummary> _availableProducts = [];
+    private List<WarehouseSummary> _availableWarehouses = [];
+
+    private readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Large, FullWidth = true };
+    private readonly DialogOptions _largeDialogOptions = new() { MaxWidth = MaxWidth.Large, FullWidth = true };
+    private readonly DialogOptions _smallDialogOptions = new() { MaxWidth = MaxWidth.Small, FullWidth = true };
+
+    public class CreateSoLineModel
+    {
+        public Guid ProductId { get; set; }
+        public decimal Quantity { get; set; } = 1;
+        public decimal UnitPrice { get; set; }
+        public decimal DiscountRate { get; set; }
+    }
+
+    public record CustomerSummary(Guid Id, string Code, string Name, decimal CreditLimit);
+    public record ProductSummary(Guid Id, string Sku, string Name, decimal SellingPrice);
+    public record WarehouseSummary(Guid Id, string Code, string Name);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLookups();
+        await LoadData();
+    }
+
+    private async Task LoadLookups()
+    {
+        _availableCustomers = await DbContext.Customers
+            .AsNoTracking()
+            .Where(c => c.IsActive)
+            .OrderBy(c => c.Name)
+            .Select(c => new CustomerSummary(c.Id, c.Code, c.Name, c.CreditLimit))
+            .ToListAsync();
+
+        _availableProducts = await DbContext.Products
+            .AsNoTracking()
+            .Where(p => p.IsActive)
+            .OrderBy(p => p.Name)
+            .Select(p => new ProductSummary(p.Id, p.Sku, p.Name, p.SellingPrice))
+            .ToListAsync();
+
+        _availableWarehouses = await DbContext.Warehouses
+            .AsNoTracking()
+            .Where(w => w.IsActive)
+            .OrderBy(w => w.Name)
+            .Select(w => new WarehouseSummary(w.Id, w.Code, w.Name))
+            .ToListAsync();
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        try
+        {
+            var result = await Mediator.Send(new GetSalesOrdersQuery(
+                SearchTerm: _searchTerm,
+                PageNumber: _currentPage,
+                PageSize: _pageSize));
+
+            if (result.IsSuccess)
+            {
+                _orders = result.Value.Items.ToList();
+                _totalPages = (int)Math.Ceiling((double)result.Value.TotalCount / _pageSize);
+            }
+            else
+            {
+                Snackbar.Add(result.Error.Description, Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Gagal memuat SO: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _currentPage = 1;
+            await LoadData();
+        }
+    }
+
+    private async Task OnPageChanged(int page)
+    {
+        _currentPage = page;
+        await LoadData();
+    }
+
+    private void ShowDetails(SalesOrderDto so)
+    {
+        _selectedOrder = so;
+        _detailsOpen = true;
+    }
+
+    private void OpenConfirmDialog(SalesOrderDto so)
+    {
+        _orderToConfirm = so;
+        _confirmWarehouseId = _availableWarehouses.FirstOrDefault()?.Id ?? Guid.Empty;
+        _confirmOpen = true;
+    }
+
+    private async Task ExecuteConfirmOrder()
+    {
+        if (_orderToConfirm == null || _confirmWarehouseId == Guid.Empty)
+        {
+            Snackbar.Add("Silakan pilih gudang pemenuhan.", Severity.Warning);
+            return;
+        }
+
+        var result = await Mediator.Send(new ConfirmSalesOrderCommand(_orderToConfirm.Id, _confirmWarehouseId));
+        if (result.IsSuccess)
+        {
+            Snackbar.Add($"Sales Order {_orderToConfirm.OrderNumber} berhasil dikonfirmasi dan stok telah direservasi.", Severity.Success);
+            _confirmOpen = false;
+            await LoadData();
+        }
+        else
+        {
+            Snackbar.Add(result.Error.Description, Severity.Error);
+        }
+    }
+
+    private void OpenCreateDialog()
+    {
+        _formCustomerId = _availableCustomers.FirstOrDefault()?.Id ?? Guid.Empty;
+        _formOrderDate = DateTime.Today;
+        _formExpectedDeliveryDate = DateTime.Today.AddDays(7);
+
+        var firstProd = _availableProducts.FirstOrDefault();
+        _formLines =
+        [
+            new CreateSoLineModel
+            {
+                ProductId = firstProd?.Id ?? Guid.Empty,
+                Quantity = 1,
+                UnitPrice = firstProd?.SellingPrice ?? 0,
+                DiscountRate = 0
+            }
+        ];
+        _createOpen = true;
+    }
+
+    private void OnProductSelected(CreateSoLineModel line, Guid productId)
+    {
+        line.ProductId = productId;
+        var p = _availableProducts.FirstOrDefault(x => x.Id == productId);
+        if (p != null)
+        {
+            line.UnitPrice = p.SellingPrice;
+        }
+    }
+
+    private void AddFormLine()
+    {
+        var firstProd = _availableProducts.FirstOrDefault();
+        _formLines.Add(new CreateSoLineModel
+        {
+            ProductId = firstProd?.Id ?? Guid.Empty,
+            Quantity = 1,
+            UnitPrice = firstProd?.SellingPrice ?? 0,
+            DiscountRate = 0
+        });
+    }
+
+    private async Task SaveCreate()
+    {
+        if (_formCustomerId == Guid.Empty)
+        {
+            Snackbar.Add("Silakan pilih pelanggan/customer.", Severity.Warning);
+            return;
+        }
+
+        if (_formLines.Count == 0 || _formLines.Any(l => l.ProductId == Guid.Empty || l.Quantity <= 0))
+        {
+            Snackbar.Add("Mohon lengkapi baris item produk SO dengan kuantitas valid.", Severity.Warning);
+            return;
+        }
+
+        var company = await DbContext.Companies.FirstOrDefaultAsync();
+        var branch = await DbContext.Branches.FirstOrDefaultAsync();
+
+        if (company == null || branch == null)
+        {
+            Snackbar.Add("Master Company / Branch belum terkonfigurasi.", Severity.Error);
+            return;
+        }
+
+        var command = new CreateSalesOrderCommand(
+            CompanyId: company.Id,
+            BranchId: branch.Id,
+            CustomerId: _formCustomerId,
+            OrderDate: DateOnly.FromDateTime(_formOrderDate ?? DateTime.Today),
+            ExpectedDeliveryDate: _formExpectedDeliveryDate.HasValue ? DateOnly.FromDateTime(_formExpectedDeliveryDate.Value) : null,
+            Items: _formLines.Select(l => new SoItemInput(l.ProductId, l.Quantity, l.UnitPrice, l.DiscountRate)).ToList()
+        );
+
+        var result = await Mediator.Send(command);
+        if (result.IsSuccess)
+        {
+            Snackbar.Add("Sales Order berhasil diterbitkan.", Severity.Success);
+            _createOpen = false;
+            await LoadData();
+        }
+        else
+        {
+            Snackbar.Add(result.Error.Description, Severity.Error);
+        }
+    }
+
+    private Color GetStatusColor(string status) => status switch
+    {
+        "Draft" => Color.Default,
+        "Confirmed" => Color.Info,
+        "PartiallyShipped" => Color.Warning,
+        "FullyShipped" => Color.Success,
+        "Invoiced" => Color.Primary,
+        "Closed" => Color.Dark,
+        "Cancelled" => Color.Error,
+        _ => Color.Default
+    };
+}
