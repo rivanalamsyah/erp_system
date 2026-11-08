@@ -1,0 +1,295 @@
+@page "/inventory/adjustments"
+@inject ISender Sender
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IApplicationDbContext DbContext
+@using ERP.Application.Features.Inventory.StockAdjustments
+@using ERP.Domain.Entities.Inventory
+@using ERP.Domain.Entities.Master
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>Penyesuaian & Opname Stok — Enterprise ERP</PageTitle>
+
+<div class="mb-4 d-flex justify-space-between align-center">
+    <div>
+        <MudText Typo="Typo.h5" Style="font-weight: 700; color: #0F172A;">
+            Penyesuaian & Stock Opname
+        </MudText>
+        <MudText Typo="Typo.body2" Style="color: #64748B;">
+            Rekonsiliasi selisih stok fisik vs sistem dengan otorisasi approval manajerial.
+        </MudText>
+    </div>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+        Buat Dokumen Opname
+    </MudButton>
+</div>
+
+<MudCard Elevation="1" Class="rounded-lg border border-slate-200">
+    <MudTable ServerData="LoadServerData" @ref="_table" Dense="true" Hover="true" Striped="true" Loading="@_loading">
+        <ToolBarContent>
+            <MudText Typo="Typo.h6" Style="font-weight: 600;">Daftar Rekonsiliasi Opname</MudText>
+            <MudSpacer />
+            <MudTextField @bind-Value="_searchTerm" Placeholder="Cari nomor opname, gudang..." Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Class="mt-0"
+                          Clearable="true" Immediate="true" OnKeyUp="OnSearch" DebounceInterval="300" />
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Nomor Dokumen</MudTh>
+            <MudTh>Gudang</MudTh>
+            <MudTh>Tanggal</MudTh>
+            <MudTh>Alasan Penyesuaian</MudTh>
+            <MudTh Style="text-align: center;">Item</MudTh>
+            <MudTh Style="text-align: center;">Status</MudTh>
+            <MudTh Style="text-align: right;">Aksi Otorisasi</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Nomor">
+                <MudText Typo="Typo.body2" Style="font-family: monospace; font-weight: 700; color: #1E3A8A;">
+                    @context.AdjustmentNumber
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Gudang">@context.WarehouseName</MudTd>
+            <MudTd DataLabel="Tanggal">@context.AdjustmentDate.ToString("dd MMM yyyy")</MudTd>
+            <MudTd DataLabel="Alasan">
+                <MudText Typo="Typo.body2" Style="font-size: 0.85rem; color: #475569;">
+                    @context.Reason
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Item" Style="text-align: center;">
+                <MudBadge Content="@context.Items.Count" Color="Color.Info" Overlap="false" />
+            </MudTd>
+            <MudTd DataLabel="Status" Style="text-align: center;">
+                <MudChip T="string" Color="@GetStatusColor(context.Status)" Size="Size.Small">
+                    @context.Status
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Aksi" Style="text-align: right;">
+                @if (context.Status == "Draft")
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.FactCheck"
+                               OnClick="@(() => ApproveAdjustmentAsync(context))">
+                        Setujui (Approve)
+                    </MudButton>
+                }
+                else
+                {
+                    <MudChip T="string" Color="Color.Success" Variant="Variant.Text" Size="Size.Small">
+                        Telah Disetujui
+                    </MudChip>
+                }
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <div class="pa-8 text-center">
+                <MudIcon Icon="@Icons.Material.Filled.Tune" Size="Size.Large" Color="Color.Default" Class="mb-2" />
+                <MudText Typo="Typo.body1" Style="font-weight: 600;">Belum ada dokumen opname</MudText>
+            </div>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[] { 10, 25, 50 }" InfoFormat="{first_item}-{last_item} dari {all_items}" />
+        </PagerContent>
+    </MudTable>
+</MudCard>
+
+<!-- Dialog Buat Opname Baru -->
+<MudDialog @bind-Visible="_dialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="font-weight: 700;">Buat Formulir Stock Opname</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudSelect T="Guid" Label="Gudang Pemeriksaan" @bind-Value="_warehouseId" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense">
+                @foreach (var w in _warehouses)
+                {
+                    <MudSelectItem Value="@w.Id">@w.Name</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudTextField @bind-Value="_reason" Label="Alasan / Berita Acara Opname" Required="true"
+                          Placeholder="Misal: Selisih penghitungan fisik akhir kuartal..." Variant="Variant.Outlined" Margin="Margin.Dense" />
+
+            <MudDivider Class="my-2" />
+            <div class="d-flex justify-space-between align-center">
+                <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">Hasil Hitung Fisik Produk</MudText>
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" Color="Color.Primary" OnClick="AddItemRow">
+                    Tambah Produk
+                </MudButton>
+            </div>
+
+            @foreach (var item in _items)
+            {
+                <div class="d-flex gap-2 align-center pa-2 rounded border border-slate-200" style="background-color: #F8FAFC;">
+                    <MudSelect T="Guid" Label="Produk" @bind-Value="item.ProductId" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-2">
+                        @foreach (var p in _products)
+                        {
+                            <MudSelectItem Value="@p.Id">@p.Name (@p.Sku)</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudNumericField @bind-Value="item.PhysicalQuantity" Label="Hasil Hitung Fisik" Min="0m" Format="N2"
+                                     Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-1" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                   OnClick="@(() => _items.Remove(item))" />
+                </div>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _dialogVisible = false">Batal</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAdjustmentAsync" Disabled="_saving">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Menyimpan...</span>
+            }
+            else
+            {
+                <span>Simpan Opname</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private MudTable<StockAdjustmentDto>? _table;
+    private string? _searchTerm;
+    private bool _loading;
+    private bool _saving;
+    private bool _dialogVisible;
+
+    private List<Warehouse> _warehouses = [];
+    private List<Product> _products = [];
+
+    private Guid _warehouseId;
+    private string _reason = string.Empty;
+    private List<AdjustmentItemModel> _items = [];
+
+    private readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _warehouses = await DbContext.Warehouses.IgnoreQueryFilters().OrderBy(w => w.Name).ToListAsync();
+        _products = await DbContext.Products.IgnoreQueryFilters().Where(p => p.IsActive).OrderBy(p => p.Name).ToListAsync();
+    }
+
+    private async Task<TableData<StockAdjustmentDto>> LoadServerData(TableState state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            var query = new GetStockAdjustmentsQuery(
+                SearchTerm: _searchTerm,
+                PageNumber: state.Page + 1,
+                PageSize: state.PageSize);
+
+            var result = await Sender.Send(query, cancellationToken);
+            if (result.IsSuccess)
+            {
+                return new TableData<StockAdjustmentDto>
+                {
+                    TotalItems = result.Value.TotalCount,
+                    Items = result.Value.Items
+                };
+            }
+
+            Snackbar.Add(result.Error.Description, Severity.Error);
+            return new TableData<StockAdjustmentDto> { TotalItems = 0, Items = [] };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OnSearch() => _table?.ReloadServerData();
+
+    private Color GetStatusColor(string status) => status switch
+    {
+        "Draft" => Color.Warning,
+        "Approved" => Color.Success,
+        "Rejected" => Color.Error,
+        _ => Color.Default
+    };
+
+    private void OpenCreateDialog()
+    {
+        _warehouseId = _warehouses.FirstOrDefault()?.Id ?? Guid.Empty;
+        _reason = string.Empty;
+        _items = [new AdjustmentItemModel { ProductId = _products.FirstOrDefault()?.Id ?? Guid.Empty, PhysicalQuantity = 0m }];
+        _dialogVisible = true;
+    }
+
+    private void AddItemRow()
+    {
+        _items.Add(new AdjustmentItemModel { ProductId = _products.FirstOrDefault()?.Id ?? Guid.Empty, PhysicalQuantity = 0m });
+    }
+
+    private async Task SaveAdjustmentAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_reason) || _warehouseId == Guid.Empty || _items.Count == 0)
+        {
+            Snackbar.Add("Mohon lengkapi alasan dan item produk opname.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var companyId = (await DbContext.Companies.IgnoreQueryFilters().FirstAsync()).Id;
+            var branchId = (await DbContext.Branches.IgnoreQueryFilters().FirstAsync()).Id;
+
+            var command = new CreateStockAdjustmentCommand(
+                CompanyId: companyId,
+                BranchId: branchId,
+                WarehouseId: _warehouseId,
+                AdjustmentDate: DateOnly.FromDateTime(DateTime.UtcNow),
+                Reason: _reason,
+                Items: _items.Select(i => new AdjustmentItemInput(i.ProductId, i.PhysicalQuantity)).ToList());
+
+            var result = await Sender.Send(command);
+            if (result.IsSuccess)
+            {
+                Snackbar.Add("Dokumen stock opname berhasil dibuat.", Severity.Success);
+                _dialogVisible = false;
+                _table?.ReloadServerData();
+            }
+            else
+            {
+                Snackbar.Add(result.Error.Description, Severity.Error);
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ApproveAdjustmentAsync(StockAdjustmentDto adjustment)
+    {
+        bool? confirmed = await DialogService.ShowMessageBoxAsync(
+            "Konfirmasi Persetujuan Opname",
+            $"Otorisasi penyesuaian '{adjustment.AdjustmentNumber}'? Saldo stok fisik dan mutasi perpetual akan langsung diperbarui ke database.",
+            yesText: "Setujui & Terapkan", cancelText: "Batal");
+
+        if (confirmed == true)
+        {
+            var result = await Sender.Send(new ApproveStockAdjustmentCommand(adjustment.Id));
+            if (result.IsSuccess)
+            {
+                Snackbar.Add("Penyesuaian stok berhasil disetujui dan diterapkan.", Severity.Success);
+                _table?.ReloadServerData();
+            }
+            else
+            {
+                Snackbar.Add(result.Error.Description, Severity.Error);
+            }
+        }
+    }
+
+    private class AdjustmentItemModel
+    {
+        public Guid ProductId { get; set; }
+        public decimal PhysicalQuantity { get; set; }
+    }
+}
+

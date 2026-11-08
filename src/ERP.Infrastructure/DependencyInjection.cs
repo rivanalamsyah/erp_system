@@ -33,6 +33,7 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
+        services.AddScoped<IDocumentSequenceService, DocumentSequenceService>();
         services.AddScoped<DatabaseSeeder>();
 
         services.AddIdentity<ApplicationUser, ApplicationRole>(options =>

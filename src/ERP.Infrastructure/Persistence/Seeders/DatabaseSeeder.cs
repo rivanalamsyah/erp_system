@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using ERP.Domain.Entities.Inventory;
 using ERP.Domain.Entities.Master;
 using ERP.Infrastructure.Identity.Models;
 using ERP.Infrastructure.Persistence.Context;
@@ -26,6 +27,7 @@ public class DatabaseSeeder(
         await SeedPermissionsAsync();
         await SeedRolesAndRolePermissionsAsync();
         await SeedAdminUserAsync();
+        await SeedInventoryAsync();
 
         logger.LogInformation("Database seeding completed successfully.");
     }
@@ -115,6 +117,25 @@ public class DatabaseSeeder(
             context.ProductCategories.AddRange(categories);
             await context.SaveChangesAsync();
             logger.LogInformation("Seeded product categories.");
+        }
+    }
+
+    private async Task SeedInventoryAsync()
+    {
+        var warehouse = await context.Warehouses.IgnoreQueryFilters().FirstOrDefaultAsync(w => w.CompanyId == DefaultCompanyId);
+        if (warehouse == null)
+        {
+            warehouse = Warehouse.Create(
+                companyId: DefaultCompanyId,
+                branchId: DefaultBranchId,
+                code: "WH-JKT-01",
+                name: "Gudang Utama Jakarta",
+                location: "Kawasan Industri Pulo Gadung Blok B No. 12, Jakarta Timur",
+                createdByUserId: SystemUserId);
+
+            context.Warehouses.Add(warehouse);
+            await context.SaveChangesAsync();
+            logger.LogInformation("Seeded default central warehouse: {WarehouseName}", warehouse.Name);
         }
     }
 

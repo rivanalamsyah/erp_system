@@ -1,0 +1,228 @@
+@page "/inventory/stock"
+@inject ISender Sender
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IApplicationDbContext DbContext
+@using ERP.Application.Features.Inventory.StockBalances
+@using ERP.Domain.Entities.Inventory
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>Saldo & Kartu Stok — Enterprise ERP</PageTitle>
+
+<div class="mb-4 d-flex justify-space-between align-center">
+    <div>
+        <MudText Typo="Typo.h5" Style="font-weight: 700; color: #0F172A;">
+            Saldo & Valuasi Stok Gudang
+        </MudText>
+        <MudText Typo="Typo.body2" Style="color: #64748B;">
+            Monitoring kuantitas fisik, stok dialokasikan (reserved), ketersediaan bebas, dan biaya rata-rata (Moving Average).
+        </MudText>
+    </div>
+</div>
+
+<MudCard Elevation="1" Class="rounded-lg border border-slate-200">
+    <MudTable ServerData="LoadServerData" @ref="_table" Dense="true" Hover="true" Striped="true" Loading="@_loading">
+        <ToolBarContent>
+            <MudText Typo="Typo.h6" Style="font-weight: 600;">Saldo Inventaris Real-Time</MudText>
+            <MudSpacer />
+            <MudSelect T="Guid?" Label="Filter Gudang" @bind-Value="_selectedWarehouseFilter" Dense="true" Margin="Margin.Dense"
+                       Class="mr-4" Style="max-width: 250px;" SelectedValuesChanged="OnFilterChanged" Clearable="true">
+                @foreach (var w in _warehouses)
+                {
+                    <MudSelectItem Value="@((Guid?)w.Id)">@w.Name (@w.Code)</MudSelectItem>
+                }
+            </MudSelect>
+            <MudTextField @bind-Value="_searchTerm" Placeholder="Cari SKU, nama barang..." Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Class="mt-0"
+                          Clearable="true" Immediate="true" OnKeyUp="OnSearch" DebounceInterval="300" />
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Gudang</MudTh>
+            <MudTh>SKU Produk</MudTh>
+            <MudTh>Nama Produk</MudTh>
+            <MudTh>Satuan</MudTh>
+            <MudTh Style="text-align: right;">Stok Fisik</MudTh>
+            <MudTh Style="text-align: right;">Reserved</MudTh>
+            <MudTh Style="text-align: right;">Tersedia (Avail)</MudTh>
+            <MudTh Style="text-align: right;">Harga Rata2 (Cost)</MudTh>
+            <MudTh Style="text-align: right;">Total Nilai Aset</MudTh>
+            <MudTh Style="text-align: center;">Kartu Stok</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Gudang">
+                <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" Size="Size.Small">
+                    @context.WarehouseCode
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="SKU">
+                <MudText Typo="Typo.body2" Style="font-family: monospace; font-weight: 600; color: #1E3A8A;">
+                    @context.ProductSku
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Nama">
+                <MudText Typo="Typo.body2" Style="font-weight: 600;">@context.ProductName</MudText>
+            </MudTd>
+            <MudTd DataLabel="Satuan">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@context.UomCode</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Fisik" Style="text-align: right; font-weight: 600;">
+                @context.PhysicalQuantity.ToString("N2")
+            </MudTd>
+            <MudTd DataLabel="Reserved" Style="text-align: right; color: #D97706;">
+                @context.ReservedQuantity.ToString("N2")
+            </MudTd>
+            <MudTd DataLabel="Tersedia" Style="text-align: right; color: #16A34A; font-weight: 700;">
+                @context.AvailableQuantity.ToString("N2")
+            </MudTd>
+            <MudTd DataLabel="Average Cost" Style="text-align: right; font-family: monospace;">
+                Rp @context.AverageCost.ToString("N2")
+            </MudTd>
+            <MudTd DataLabel="Valuasi" Style="text-align: right; font-family: monospace; font-weight: 700;">
+                Rp @context.TotalValuation.ToString("N2")
+            </MudTd>
+            <MudTd DataLabel="Kartu" Style="text-align: center;">
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.ReceiptLong"
+                           OnClick="@(() => OpenStockCardDialog(context))">
+                    Kartu Stok
+                </MudButton>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <div class="pa-8 text-center">
+                <MudIcon Icon="@Icons.Material.Filled.Warehouse" Size="Size.Large" Color="Color.Default" Class="mb-2" />
+                <MudText Typo="Typo.body1" Style="font-weight: 600;">Belum ada saldo stok tercatat</MudText>
+                <MudText Typo="Typo.caption" Style="color: #64748B;">Saldo stok terisi otomatis melalui penerimaan barang (GRN), penyesuaian opname, atau transfer.</MudText>
+            </div>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[] { 10, 25, 50 }" InfoFormat="{first_item}-{last_item} dari {all_items}" />
+        </PagerContent>
+    </MudTable>
+</MudCard>
+
+<!-- Dialog Kartu Stok Perpetual (Stock Card) -->
+<MudDialog @bind-Visible="_stockCardVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="font-weight: 700;">
+            Buku Besar Mutasi Stok: @_selectedBalance?.ProductName (@_selectedBalance?.ProductSku)
+        </MudText>
+        <MudText Typo="Typo.caption" Style="color: #64748B;">
+            Gudang: @_selectedBalance?.WarehouseName (@_selectedBalance?.WarehouseCode)
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTable Items="_stockMovements" Dense="true" Hover="true" Striped="true" Elevation="0">
+            <HeaderContent>
+                <MudTh>Tanggal (UTC)</MudTh>
+                <MudTh>Tipe Mutasi</MudTh>
+                <MudTh>Nomor Dokumen</MudTh>
+                <MudTh Style="text-align: center;">Arah</MudTh>
+                <MudTh Style="text-align: right;">Kuantitas</MudTh>
+                <MudTh Style="text-align: right;">Biaya Unit</MudTh>
+                <MudTh Style="text-align: right;">Total Nilai</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Tanggal">@context.MovementDateUtc.ToString("dd MMM yyyy HH:mm")</MudTd>
+                <MudTd DataLabel="Tipe">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default">@context.MovementType</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Referensi" Style="font-family: monospace; font-weight: 600;">
+                    @context.ReferenceNumber
+                </MudTd>
+                <MudTd DataLabel="Arah" Style="text-align: center;">
+                    <MudChip T="string" Color="@(context.Direction == "IN" ? Color.Success : Color.Error)" Size="Size.Small">
+                        @context.Direction
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Qty" Style="text-align: right; font-weight: 600;">
+                    @context.Quantity.ToString("N2")
+                </MudTd>
+                <MudTd DataLabel="Cost" Style="text-align: right; font-family: monospace;">
+                    Rp @context.UnitCost.ToString("N2")
+                </MudTd>
+                <MudTd DataLabel="Total" Style="text-align: right; font-family: monospace; font-weight: 600;">
+                    Rp @context.TotalCost.ToString("N2")
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <div class="pa-4 text-center">
+                    <MudText Typo="Typo.body2" Style="color: #94A3B8;">Belum ada riwayat mutasi stok untuk produk ini.</MudText>
+                </div>
+            </NoRecordsContent>
+        </MudTable>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="() => _stockCardVisible = false">
+            Tutup
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private MudTable<StockBalanceDto>? _table;
+    private string? _searchTerm;
+    private Guid? _selectedWarehouseFilter;
+    private bool _loading;
+    private List<Warehouse> _warehouses = [];
+
+    private bool _stockCardVisible;
+    private StockBalanceDto? _selectedBalance;
+    private IReadOnlyList<StockMovementDto> _stockMovements = [];
+
+    private readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _warehouses = await DbContext.Warehouses.IgnoreQueryFilters().OrderBy(w => w.Name).ToListAsync();
+    }
+
+    private async Task<TableData<StockBalanceDto>> LoadServerData(TableState state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            var query = new GetStockBalancesQuery(
+                WarehouseId: _selectedWarehouseFilter,
+                SearchTerm: _searchTerm,
+                PageNumber: state.Page + 1,
+                PageSize: state.PageSize);
+
+            var result = await Sender.Send(query, cancellationToken);
+            if (result.IsSuccess)
+            {
+                return new TableData<StockBalanceDto>
+                {
+                    TotalItems = result.Value.TotalCount,
+                    Items = result.Value.Items
+                };
+            }
+
+            Snackbar.Add(result.Error.Description, Severity.Error);
+            return new TableData<StockBalanceDto> { TotalItems = 0, Items = [] };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OnSearch() => _table?.ReloadServerData();
+    private void OnFilterChanged() => _table?.ReloadServerData();
+
+    private async Task OpenStockCardDialog(StockBalanceDto balance)
+    {
+        _selectedBalance = balance;
+        var result = await Sender.Send(new GetStockCardQuery(balance.WarehouseId, balance.ProductId));
+        if (result.IsSuccess)
+        {
+            _stockMovements = result.Value;
+            _stockCardVisible = true;
+        }
+        else
+        {
+            Snackbar.Add(result.Error.Description, Severity.Error);
+        }
+    }
+}
+

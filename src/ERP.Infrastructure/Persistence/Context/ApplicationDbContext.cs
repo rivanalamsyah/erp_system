@@ -3,7 +3,9 @@ using Microsoft.EntityFrameworkCore;
 using ERP.Application.Common.Interfaces;
 using ERP.Domain.Common;
 using ERP.Domain.Entities.Audit;
+using ERP.Domain.Entities.Inventory;
 using ERP.Domain.Entities.Master;
+using ERP.Domain.Entities.Procurement;
 using ERP.Infrastructure.Identity.Models;
 using ERP.Infrastructure.Persistence.Interceptors;
 
@@ -25,6 +27,24 @@ public class ApplicationDbContext(
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<Supplier> Suppliers => Set<Supplier>();
     public DbSet<DocumentSequence> DocumentSequences => Set<DocumentSequence>();
+
+    // Inventory
+    public DbSet<Warehouse> Warehouses => Set<Warehouse>();
+    public DbSet<StockBalance> StockBalances => Set<StockBalance>();
+    public DbSet<StockMovement> StockMovements => Set<StockMovement>();
+    public DbSet<StockTransfer> StockTransfers => Set<StockTransfer>();
+    public DbSet<StockTransferItem> StockTransferItems => Set<StockTransferItem>();
+    public DbSet<StockAdjustment> StockAdjustments => Set<StockAdjustment>();
+    public DbSet<StockAdjustmentItem> StockAdjustmentItems => Set<StockAdjustmentItem>();
+
+    // Procurement
+    public DbSet<PurchaseRequest> PurchaseRequests => Set<PurchaseRequest>();
+    public DbSet<PurchaseRequestItem> PurchaseRequestItems => Set<PurchaseRequestItem>();
+    public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
+    public DbSet<PurchaseOrderItem> PurchaseOrderItems => Set<PurchaseOrderItem>();
+    public DbSet<GoodsReceipt> GoodsReceipts => Set<GoodsReceipt>();
+    public DbSet<GoodsReceiptItem> GoodsReceiptItems => Set<GoodsReceiptItem>();
+    public DbSet<VendorBill> VendorBills => Set<VendorBill>();
 
     // Identity Custom Tables
     public DbSet<Permission> Permissions => Set<Permission>();
@@ -224,7 +244,187 @@ public class ApplicationDbContext(
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // 3. Pemetaan Schema Audit
+        // 3. Pemetaan Schema Inventory
+        builder.Entity<Warehouse>(b =>
+        {
+            b.ToTable("warehouses", "inventory");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => new { x.CompanyId, x.Code }).IsUnique();
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
+            b.Property(x => x.Version).IsRowVersion();
+            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+        });
+
+        builder.Entity<StockBalance>(b =>
+        {
+            b.ToTable("stock_balances", "inventory");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => new { x.WarehouseId, x.ProductId }).IsUnique();
+            b.Property(x => x.PhysicalQuantity).HasPrecision(14, 4);
+            b.Property(x => x.ReservedQuantity).HasPrecision(14, 4);
+            b.Property(x => x.AverageCost).HasPrecision(18, 4);
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+            b.HasQueryFilter(x => currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId);
+        });
+
+        builder.Entity<StockMovement>(b =>
+        {
+            b.ToTable("stock_movements", "inventory");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Quantity).HasPrecision(14, 4);
+            b.Property(x => x.UnitCost).HasPrecision(18, 4);
+            b.Property(x => x.TotalCost).HasPrecision(18, 2);
+            b.Property(x => x.MovementType).HasConversion<string>();
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+            b.HasQueryFilter(x => currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId);
+        });
+
+        builder.Entity<StockTransfer>(b =>
+        {
+            b.ToTable("stock_transfers", "inventory");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => x.TransferNumber).IsUnique();
+            b.Property(x => x.Status).HasConversion<string>();
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.SourceWarehouse).WithMany().HasForeignKey(x => x.SourceWarehouseId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.DestinationWarehouse).WithMany().HasForeignKey(x => x.DestinationWarehouseId).OnDelete(DeleteBehavior.Restrict);
+            b.Property(x => x.Version).IsRowVersion();
+            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+        });
+
+        builder.Entity<StockTransferItem>(b =>
+        {
+            b.ToTable("stock_transfer_items", "inventory");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Quantity).HasPrecision(14, 4);
+            b.HasOne(x => x.Transfer).WithMany(t => t.Items).HasForeignKey(x => x.TransferId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<StockAdjustment>(b =>
+        {
+            b.ToTable("stock_adjustments", "inventory");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => x.AdjustmentNumber).IsUnique();
+            b.Property(x => x.Status).HasConversion<string>();
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
+            b.Property(x => x.Version).IsRowVersion();
+            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+        });
+
+        builder.Entity<StockAdjustmentItem>(b =>
+        {
+            b.ToTable("stock_adjustment_items", "inventory");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.SystemQuantity).HasPrecision(14, 4);
+            b.Property(x => x.PhysicalQuantity).HasPrecision(14, 4);
+            b.Property(x => x.DifferenceQuantity).HasPrecision(14, 4);
+            b.Property(x => x.UnitCost).HasPrecision(18, 4);
+            b.HasOne(x => x.Adjustment).WithMany(a => a.Items).HasForeignKey(x => x.AdjustmentId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // 4. Pemetaan Schema Procurement
+        builder.Entity<PurchaseRequest>(b =>
+        {
+            b.ToTable("purchase_requests", "procurement");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => x.RequestNumber).IsUnique();
+            b.Property(x => x.Status).HasConversion<string>();
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
+            b.Property(x => x.Version).IsRowVersion();
+            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+        });
+
+        builder.Entity<PurchaseRequestItem>(b =>
+        {
+            b.ToTable("purchase_request_items", "procurement");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Quantity).HasPrecision(14, 4);
+            b.Property(x => x.EstimatedUnitPrice).HasPrecision(18, 4);
+            b.HasOne(x => x.Request).WithMany(r => r.Items).HasForeignKey(x => x.RequestId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<PurchaseOrder>(b =>
+        {
+            b.ToTable("purchase_orders", "procurement");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => x.PoNumber).IsUnique();
+            b.Property(x => x.Status).HasConversion<string>();
+            b.Property(x => x.SubtotalAmount).HasPrecision(18, 2);
+            b.Property(x => x.TaxAmount).HasPrecision(18, 2);
+            b.Property(x => x.TotalAmount).HasPrecision(18, 2);
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict);
+            b.Property(x => x.Version).IsRowVersion();
+            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+        });
+
+        builder.Entity<PurchaseOrderItem>(b =>
+        {
+            b.ToTable("purchase_order_items", "procurement");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Quantity).HasPrecision(14, 4);
+            b.Property(x => x.ReceivedQuantity).HasPrecision(14, 4);
+            b.Property(x => x.UnitPrice).HasPrecision(18, 4);
+            b.Property(x => x.DiscountRate).HasPrecision(5, 2);
+            b.Property(x => x.LineTotal).HasPrecision(18, 2);
+            b.HasOne(x => x.PurchaseOrder).WithMany(p => p.Items).HasForeignKey(x => x.PurchaseOrderId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<GoodsReceipt>(b =>
+        {
+            b.ToTable("goods_receipts", "procurement");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => x.ReceiptNumber).IsUnique();
+            b.Property(x => x.Status).HasConversion<string>();
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.PurchaseOrder).WithMany().HasForeignKey(x => x.PurchaseOrderId).OnDelete(DeleteBehavior.Restrict);
+            b.Property(x => x.Version).IsRowVersion();
+            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+        });
+
+        builder.Entity<GoodsReceiptItem>(b =>
+        {
+            b.ToTable("goods_receipt_items", "procurement");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.QuantityReceived).HasPrecision(14, 4);
+            b.HasOne(x => x.GoodsReceipt).WithMany(g => g.Items).HasForeignKey(x => x.GoodsReceiptId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.PurchaseOrderItem).WithMany().HasForeignKey(x => x.PoItemId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<VendorBill>(b =>
+        {
+            b.ToTable("vendor_bills", "procurement");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => x.BillNumber).IsUnique();
+            b.Property(x => x.Status).HasConversion<string>();
+            b.Property(x => x.TotalAmount).HasPrecision(18, 2);
+            b.Property(x => x.PaidAmount).HasPrecision(18, 2);
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.PurchaseOrder).WithMany().HasForeignKey(x => x.PurchaseOrderId).OnDelete(DeleteBehavior.Restrict);
+            b.Property(x => x.Version).IsRowVersion();
+            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+        });
+
+        // 5. Pemetaan Schema Audit
         builder.Entity<AuditLog>(b =>
         {
             b.ToTable("audit_logs", "audit");

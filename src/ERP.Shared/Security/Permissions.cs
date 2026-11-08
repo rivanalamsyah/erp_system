@@ -33,11 +33,18 @@ public static class Permissions
 
     public static class Procurement
     {
+        public const string PrView = "procurement.pr.view";
         public const string PrCreate = "procurement.pr.create";
         public const string PrApprove = "procurement.pr.approve";
+        public const string PoView = "procurement.po.view";
         public const string PoCreate = "procurement.po.create";
         public const string PoApprove = "procurement.po.approve";
+        public const string GrnView = "procurement.grn.view";
+        public const string GrnCreate = "procurement.grn.create";
         public const string GrnReceive = "procurement.grn.receive";
+        public const string BillView = "procurement.bill.view";
+        public const string BillCreate = "procurement.bill.create";
+        public const string BillPost = "procurement.bill.post";
         public const string BillVerify = "procurement.bill.verify";
     }
 
@@ -98,11 +105,18 @@ public static class Permissions
         new(Sales.InvoiceIssue, "Sales", "Terbitkan Faktur Tagihan Penjualan"),
 
         // Procurement
+        new(Procurement.PrView, "Procurement", "Lihat Daftar Permintaan Pembelian (PR)"),
         new(Procurement.PrCreate, "Procurement", "Buat Permintaan Pembelian (PR)"),
         new(Procurement.PrApprove, "Procurement", "Setujui Dokumen PR Departemen"),
+        new(Procurement.PoView, "Procurement", "Lihat Daftar Pesanan Pembelian (PO)"),
         new(Procurement.PoCreate, "Procurement", "Terbitkan Pesanan Pembelian (PO)"),
         new(Procurement.PoApprove, "Procurement", "Otorisasi PO ke Vendor"),
-        new(Procurement.GrnReceive, "Procurement", "Terima Barang Masuk dari PO (GRN)"),
+        new(Procurement.GrnView, "Procurement", "Lihat Daftar Penerimaan Barang (GRN)"),
+        new(Procurement.GrnCreate, "Procurement", "Buat Penerimaan Barang Masuk (GRN)"),
+        new(Procurement.GrnReceive, "Procurement", "Terima Barang Masuk dari PO ke Gudang"),
+        new(Procurement.BillView, "Procurement", "Lihat Daftar Tagihan Vendor (AP)"),
+        new(Procurement.BillCreate, "Procurement", "Catat Tagihan Vendor Baru"),
+        new(Procurement.BillPost, "Procurement", "Posting Tagihan Vendor ke Buku Besar"),
         new(Procurement.BillVerify, "Procurement", "Verifikasi 3-Way & Tagihan Vendor"),
 
         // Inventory

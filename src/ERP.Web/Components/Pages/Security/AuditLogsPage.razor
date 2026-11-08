@@ -1,0 +1,139 @@
+@page "/security/audit-logs"
+@inject IApplicationDbContext DbContext
+@inject IDialogService DialogService
+@using ERP.Domain.Entities.Audit
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>Jejak Audit Sistem — Enterprise ERP</PageTitle>
+
+<div class="mb-4">
+    <MudText Typo="Typo.h5" Style="font-weight: 700; color: #0F172A;">
+        Jejak Audit & Rekam Aktivitas Transaksi (Audit Trail)
+    </MudText>
+    <MudText Typo="Typo.body2" Style="color: #64748B;">
+        Catatan menyeluruh seluruh operasi Create, Update, dan Soft Delete untuk kepatuhan tata kelola enterprise.
+    </MudText>
+</div>
+
+<MudCard Elevation="1" Class="rounded-lg border border-slate-200">
+    <MudTable Items="_logs" Dense="true" Hover="true" Striped="true" Loading="@_loading">
+        <ToolBarContent>
+            <MudText Typo="Typo.h6" Style="font-weight: 600;">Riwayat Audit Transaksi</MudText>
+            <MudSpacer />
+            <MudTextField @bind-Value="_searchTerm" Placeholder="Cari nama entitas, aksi..." Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Class="mt-0"
+                          Clearable="true" Immediate="true" />
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Waktu (UTC)</MudTh>
+            <MudTh>Entitas Terkena</MudTh>
+            <MudTh Style="text-align: center;">Aksi Operasi</MudTh>
+            <MudTh>ID Record</MudTh>
+            <MudTh>User ID</MudTh>
+            <MudTh>Alamat IP</MudTh>
+            <MudTh Style="text-align: right;">Detail Snapshot</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Waktu">@context.CreatedAtUtc.ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
+            <MudTd DataLabel="Entitas">
+                <MudText Typo="Typo.body2" Style="font-weight: 600;">@context.EntityName</MudText>
+            </MudTd>
+            <MudTd DataLabel="Aksi" Style="text-align: center;">
+                <MudChip T="string" Color="@GetActionColor(context.Action)" Size="Size.Small">
+                    @context.Action
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Record ID">
+                <MudText Typo="Typo.caption" Style="font-family: monospace;">@context.EntityId</MudText>
+            </MudTd>
+            <MudTd DataLabel="User ID">
+                <MudText Typo="Typo.caption" Style="font-family: monospace;">@context.UserId</MudText>
+            </MudTd>
+            <MudTd DataLabel="IP">@(string.IsNullOrEmpty(context.IpAddress) ? "127.0.0.1" : context.IpAddress)</MudTd>
+            <MudTd DataLabel="Detail" Style="text-align: right;">
+                <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
+                           OnClick="@(() => ShowAuditDetail(context))">
+                    Lihat Data
+                </MudButton>
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[] { 15, 30, 50 }" />
+        </PagerContent>
+    </MudTable>
+</MudCard>
+
+<!-- Dialog Detail JSON Audit Snapshot -->
+<MudDialog @bind-Visible="_detailDialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="font-weight: 700;">
+            Detail Snapshot Log: @_selectedLog?.EntityName (@_selectedLog?.Action)
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Style="font-weight: 600; color: #DC2626;" Class="mb-1">
+                    Nilai Lama (Old Values)
+                </MudText>
+                <div class="pa-3 rounded border border-slate-200" style="background-color: #FEF2F2; font-family: monospace; font-size: 0.8rem; max-height: 300px; overflow-y: auto; white-space: pre-wrap;">
+                    @(string.IsNullOrWhiteSpace(_selectedLog?.OldValues) ? "(Kosong / Entitas Baru)" : _selectedLog.OldValues)
+                </div>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Style="font-weight: 600; color: #16A34A;" Class="mb-1">
+                    Nilai Baru (New Values)
+                </MudText>
+                <div class="pa-3 rounded border border-slate-200" style="background-color: #F0FDF4; font-family: monospace; font-size: 0.8rem; max-height: 300px; overflow-y: auto; white-space: pre-wrap;">
+                    @(string.IsNullOrWhiteSpace(_selectedLog?.NewValues) ? "(Kosong / Dihapus)" : _selectedLog.NewValues)
+                </div>
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="() => _detailDialogVisible = false">
+            Tutup
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<AuditLog> _logs = [];
+    private AuditLog? _selectedLog;
+    private string? _searchTerm;
+    private bool _loading = true;
+    private bool _detailDialogVisible;
+
+    private readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _loading = true;
+        try
+        {
+            _logs = await DbContext.AuditLogs
+                .OrderByDescending(a => a.CreatedAtUtc)
+                .Take(200)
+                .ToListAsync();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private Color GetActionColor(string action) => action.ToUpperInvariant() switch
+    {
+        "CREATE" or "ADDED" => Color.Success,
+        "UPDATE" or "MODIFIED" => Color.Info,
+        "DELETE" or "DELETED" => Color.Error,
+        _ => Color.Default
+    };
+
+    private void ShowAuditDetail(AuditLog log)
+    {
+        _selectedLog = log;
+        _detailDialogVisible = true;
+    }
+}
+

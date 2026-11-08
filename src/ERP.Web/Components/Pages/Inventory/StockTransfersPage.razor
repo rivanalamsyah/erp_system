@@ -1,0 +1,339 @@
+@page "/inventory/transfers"
+@inject ISender Sender
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IApplicationDbContext DbContext
+@using ERP.Application.Features.Inventory.StockTransfers
+@using ERP.Domain.Entities.Inventory
+@using ERP.Domain.Entities.Master
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>Transfer Antar Gudang — Enterprise ERP</PageTitle>
+
+<div class="mb-4 d-flex justify-space-between align-center">
+    <div>
+        <MudText Typo="Typo.h5" Style="font-weight: 700; color: #0F172A;">
+            Transfer Mutasi Antar Gudang
+        </MudText>
+        <MudText Typo="Typo.body2" Style="color: #64748B;">
+            Kelola alokasi pemindahan stok antar fasilitas pergudangan (Draft &rarr; Dispatched &rarr; Received).
+        </MudText>
+    </div>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+        Buat Transfer Baru
+    </MudButton>
+</div>
+
+<MudCard Elevation="1" Class="rounded-lg border border-slate-200">
+    <MudTable ServerData="LoadServerData" @ref="_table" Dense="true" Hover="true" Striped="true" Loading="@_loading">
+        <ToolBarContent>
+            <MudText Typo="Typo.h6" Style="font-weight: 600;">Daftar Dokumen Transfer</MudText>
+            <MudSpacer />
+            <MudTextField @bind-Value="_searchTerm" Placeholder="Cari nomor dokumen, gudang..." Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Class="mt-0"
+                          Clearable="true" Immediate="true" OnKeyUp="OnSearch" DebounceInterval="300" />
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Nomor Transfer</MudTh>
+            <MudTh>Gudang Asal</MudTh>
+            <MudTh>Gudang Tujuan</MudTh>
+            <MudTh>Tanggal</MudTh>
+            <MudTh Style="text-align: center;">Item</MudTh>
+            <MudTh Style="text-align: center;">Status</MudTh>
+            <MudTh Style="text-align: right;">Aksi Operasional</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Nomor">
+                <MudText Typo="Typo.body2" Style="font-family: monospace; font-weight: 700; color: #1E3A8A;">
+                    @context.TransferNumber
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Asal">@context.SourceWarehouseName</MudTd>
+            <MudTd DataLabel="Tujuan">@context.DestinationWarehouseName</MudTd>
+            <MudTd DataLabel="Tanggal">@context.TransferDate.ToString("dd MMM yyyy")</MudTd>
+            <MudTd DataLabel="Item" Style="text-align: center;">
+                <MudBadge Content="@context.Items.Count" Color="Color.Info" Overlap="false" />
+            </MudTd>
+            <MudTd DataLabel="Status" Style="text-align: center;">
+                <MudChip T="string" Color="@GetStatusColor(context.Status)" Size="Size.Small">
+                    @context.Status
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Aksi" Style="text-align: right;">
+                @if (context.Status == "Draft")
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Warning" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.LocalShipping"
+                               OnClick="@(() => DispatchTransferAsync(context))">
+                        Kirim (Dispatch)
+                    </MudButton>
+                }
+                else if (context.Status == "Dispatched")
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.CheckCircle"
+                               OnClick="@(() => ReceiveTransferAsync(context))">
+                        Terima (Receive)
+                    </MudButton>
+                }
+                else
+                {
+                    <MudChip T="string" Color="Color.Success" Variant="Variant.Text" Size="Size.Small">
+                        Selesai
+                    </MudChip>
+                }
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <div class="pa-8 text-center">
+                <MudIcon Icon="@Icons.Material.Filled.SwapHoriz" Size="Size.Large" Color="Color.Default" Class="mb-2" />
+                <MudText Typo="Typo.body1" Style="font-weight: 600;">Belum ada dokumen transfer</MudText>
+            </div>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[] { 10, 25, 50 }" InfoFormat="{first_item}-{last_item} dari {all_items}" />
+        </PagerContent>
+    </MudTable>
+</MudCard>
+
+<!-- Dialog Buat Transfer Baru -->
+<MudDialog @bind-Visible="_dialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="font-weight: 700;">Buat Permintaan Transfer Antar Gudang</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <div class="d-flex gap-2">
+                <MudSelect T="Guid" Label="Gudang Asal" @bind-Value="_sourceWarehouseId" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-1">
+                    @foreach (var w in _warehouses)
+                    {
+                        <MudSelectItem Value="@w.Id">@w.Name</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudSelect T="Guid" Label="Gudang Tujuan" @bind-Value="_destinationWarehouseId" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-1">
+                    @foreach (var w in _warehouses.Where(x => x.Id != _sourceWarehouseId))
+                    {
+                        <MudSelectItem Value="@w.Id">@w.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </div>
+
+            <MudTextField @bind-Value="_notes" Label="Catatan / Memo Pengiriman"
+                          Placeholder="Misal: Pemenuhan stok cabang Surabaya..." Variant="Variant.Outlined" Margin="Margin.Dense" />
+
+            <MudDivider Class="my-2" />
+            <div class="d-flex justify-space-between align-center">
+                <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">Item Produk Transfer</MudText>
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Size="Size.Small" Color="Color.Primary" OnClick="AddItemRow">
+                    Tambah Item
+                </MudButton>
+            </div>
+
+            @foreach (var item in _items)
+            {
+                <div class="d-flex gap-2 align-center pa-2 rounded border border-slate-200" style="background-color: #F8FAFC;">
+                    <MudSelect T="Guid" Label="Produk" @bind-Value="item.ProductId" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-2">
+                        @foreach (var p in _products)
+                        {
+                            <MudSelectItem Value="@p.Id">@p.Name (@p.Sku)</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudNumericField @bind-Value="item.Quantity" Label="Kuantitas" Min="0.0001m" Format="N2"
+                                     Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-1" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                   OnClick="@(() => _items.Remove(item))" />
+                </div>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _dialogVisible = false">Batal</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveTransferAsync" Disabled="_saving">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Menyimpan...</span>
+            }
+            else
+            {
+                <span>Simpan Dokumen</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private MudTable<StockTransferDto>? _table;
+    private string? _searchTerm;
+    private bool _loading;
+    private bool _saving;
+    private bool _dialogVisible;
+
+    private List<Warehouse> _warehouses = [];
+    private List<Product> _products = [];
+
+    private Guid _sourceWarehouseId;
+    private Guid _destinationWarehouseId;
+    private string? _notes;
+    private List<TransferItemModel> _items = [];
+
+    private readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _warehouses = await DbContext.Warehouses.IgnoreQueryFilters().OrderBy(w => w.Name).ToListAsync();
+        _products = await DbContext.Products.IgnoreQueryFilters().Where(p => p.IsActive).OrderBy(p => p.Name).ToListAsync();
+    }
+
+    private async Task<TableData<StockTransferDto>> LoadServerData(TableState state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            var query = new GetStockTransfersQuery(
+                SearchTerm: _searchTerm,
+                PageNumber: state.Page + 1,
+                PageSize: state.PageSize);
+
+            var result = await Sender.Send(query, cancellationToken);
+            if (result.IsSuccess)
+            {
+                return new TableData<StockTransferDto>
+                {
+                    TotalItems = result.Value.TotalCount,
+                    Items = result.Value.Items
+                };
+            }
+
+            Snackbar.Add(result.Error.Description, Severity.Error);
+            return new TableData<StockTransferDto> { TotalItems = 0, Items = [] };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OnSearch() => _table?.ReloadServerData();
+
+    private Color GetStatusColor(string status) => status switch
+    {
+        "Draft" => Color.Default,
+        "Dispatched" => Color.Warning,
+        "Received" => Color.Success,
+        "Cancelled" => Color.Error,
+        _ => Color.Default
+    };
+
+    private void OpenCreateDialog()
+    {
+        _sourceWarehouseId = _warehouses.FirstOrDefault()?.Id ?? Guid.Empty;
+        _destinationWarehouseId = _warehouses.Skip(1).FirstOrDefault()?.Id ?? Guid.Empty;
+        _notes = string.Empty;
+        _items = [new TransferItemModel { ProductId = _products.FirstOrDefault()?.Id ?? Guid.Empty, Quantity = 1m }];
+        _dialogVisible = true;
+    }
+
+    private void AddItemRow()
+    {
+        _items.Add(new TransferItemModel { ProductId = _products.FirstOrDefault()?.Id ?? Guid.Empty, Quantity = 1m });
+    }
+
+    private async Task SaveTransferAsync()
+    {
+        if (_sourceWarehouseId == _destinationWarehouseId)
+        {
+            Snackbar.Add("Gudang asal dan gudang tujuan tidak boleh sama.", Severity.Warning);
+            return;
+        }
+
+        if (_items.Count == 0 || _items.Any(i => i.Quantity <= 0 || i.ProductId == Guid.Empty))
+        {
+            Snackbar.Add("Mohon lengkapi item dan kuantitas produk transfer.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var companyId = (await DbContext.Companies.IgnoreQueryFilters().FirstAsync()).Id;
+            var branchId = (await DbContext.Branches.IgnoreQueryFilters().FirstAsync()).Id;
+
+            var command = new CreateStockTransferCommand(
+                CompanyId: companyId,
+                BranchId: branchId,
+                SourceWarehouseId: _sourceWarehouseId,
+                DestinationWarehouseId: _destinationWarehouseId,
+                TransferDate: DateOnly.FromDateTime(DateTime.UtcNow),
+                Notes: _notes,
+                Items: _items.Select(i => new TransferItemInput(i.ProductId, i.Quantity)).ToList());
+
+            var result = await Sender.Send(command);
+            if (result.IsSuccess)
+            {
+                Snackbar.Add("Dokumen transfer berhasil dibuat.", Severity.Success);
+                _dialogVisible = false;
+                _table?.ReloadServerData();
+            }
+            else
+            {
+                Snackbar.Add(result.Error.Description, Severity.Error);
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DispatchTransferAsync(StockTransferDto transfer)
+    {
+        bool? confirmed = await DialogService.ShowMessageBoxAsync(
+            "Konfirmasi Pengiriman Transfer",
+            $"Kirim dokumen '{transfer.TransferNumber}'? Stok akan dikurangi dari gudang '{transfer.SourceWarehouseName}'.",
+            yesText: "Kirim Sekarang", cancelText: "Batal");
+
+        if (confirmed == true)
+        {
+            var result = await Sender.Send(new DispatchStockTransferCommand(transfer.Id));
+            if (result.IsSuccess)
+            {
+                Snackbar.Add("Transfer berhasil diberangkatkan.", Severity.Success);
+                _table?.ReloadServerData();
+            }
+            else
+            {
+                Snackbar.Add(result.Error.Description, Severity.Error);
+            }
+        }
+    }
+
+    private async Task ReceiveTransferAsync(StockTransferDto transfer)
+    {
+        bool? confirmed = await DialogService.ShowMessageBoxAsync(
+            "Konfirmasi Penerimaan Barang",
+            $"Terima barang untuk transfer '{transfer.TransferNumber}' di gudang '{transfer.DestinationWarehouseName}'?",
+            yesText: "Terima Barang", cancelText: "Batal");
+
+        if (confirmed == true)
+        {
+            var result = await Sender.Send(new ReceiveStockTransferCommand(transfer.Id));
+            if (result.IsSuccess)
+            {
+                Snackbar.Add("Barang berhasil diterima di gudang tujuan.", Severity.Success);
+                _table?.ReloadServerData();
+            }
+            else
+            {
+                Snackbar.Add(result.Error.Description, Severity.Error);
+            }
+        }
+    }
+
+    private class TransferItemModel
+    {
+        public Guid ProductId { get; set; }
+        public decimal Quantity { get; set; } = 1m;
+    }
+}
+

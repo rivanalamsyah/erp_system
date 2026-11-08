@@ -1,0 +1,365 @@
+@page "/master/suppliers"
+@inject ISender Sender
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IApplicationDbContext DbContext
+@using ERP.Application.Features.Master.Suppliers
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>Master Pemasok — Enterprise ERP</PageTitle>
+
+<div class="mb-4 d-flex justify-space-between align-center">
+    <div>
+        <MudText Typo="Typo.h5" Style="font-weight: 700; color: #0F172A;">
+            Master Pemasok / Vendor
+        </MudText>
+        <MudText Typo="Typo.body2" Style="color: #64748B;">
+            Kelola data vendor, rekening pembayaran perbankan, dan termin pembelian.
+        </MudText>
+    </div>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+        Tambah Pemasok
+    </MudButton>
+</div>
+
+<MudCard Elevation="1" Class="rounded-lg border border-slate-200">
+    <MudTable ServerData="LoadServerData" @ref="_table" Dense="true" Hover="true" Striped="true" Loading="@_loading">
+        <ToolBarContent>
+            <MudText Typo="Typo.h6" Style="font-weight: 600;">Daftar Pemasok</MudText>
+            <MudSpacer />
+            <MudTextField @bind-Value="_searchTerm" Placeholder="Cari kode, nama, bank..." Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Class="mt-0"
+                          Clearable="true" Immediate="true" OnKeyUp="OnSearch" DebounceInterval="300" />
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Kode</MudTh>
+            <MudTh>Nama Pemasok</MudTh>
+            <MudTh>Kontak</MudTh>
+            <MudTh>Alamat</MudTh>
+            <MudTh>Informasi Bank</MudTh>
+            <MudTh Style="text-align: center;">Termin (Hari)</MudTh>
+            <MudTh Style="text-align: center;">Status</MudTh>
+            <MudTh Style="text-align: right;">Aksi</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Kode">
+                <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" Size="Size.Small">
+                    @context.Code
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Nama">
+                <MudText Typo="Typo.body2" Style="font-weight: 600;">@context.Name</MudText>
+                @if (!string.IsNullOrEmpty(context.TaxNumber))
+                {
+                    <MudText Typo="Typo.caption" Style="color: #64748B;">NPWP: @context.TaxNumber</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Kontak">
+                <MudText Typo="Typo.caption" Style="display: block;">@context.Phone</MudText>
+                <MudText Typo="Typo.caption" Style="color: #64748B;">@context.Email</MudText>
+            </MudTd>
+            <MudTd DataLabel="Alamat">
+                <MudText Typo="Typo.body2" Style="font-size: 0.8rem; color: #475569; max-width: 250px;">
+                    @context.Address
+                </MudText>
+            </MudTd>
+            <MudTd DataLabel="Bank">
+                @if (!string.IsNullOrEmpty(context.BankName))
+                {
+                    <MudText Typo="Typo.body2" Style="font-weight: 600;">@context.BankName</MudText>
+                    <MudText Typo="Typo.caption" Style="font-family: monospace;">@context.BankAccountNumber</MudText>
+                    <MudText Typo="Typo.caption" Style="color: #64748B; display: block;">a.n. @context.BankAccountName</MudText>
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Style="color: #94A3B8;">-</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Termin" Style="text-align: center;">
+                <MudChip T="string" Size="Size.Small">@context.PaymentTermsDays Hari</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Status" Style="text-align: center;">
+                @if (context.IsActive)
+                {
+                    <MudChip T="string" Color="Color.Success" Size="Size.Small">Aktif</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Color="Color.Default" Size="Size.Small">Non-aktif</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Aksi" Style="text-align: right;">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                               OnClick="@(() => OpenEditDialog(context))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => DeleteSupplierAsync(context))" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <div class="pa-8 text-center">
+                <MudIcon Icon="@Icons.Material.Filled.LocalShipping" Size="Size.Large" Color="Color.Default" Class="mb-2" />
+                <MudText Typo="Typo.body1" Style="font-weight: 600;">Belum ada data pemasok</MudText>
+            </div>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[] { 10, 25, 50 }" InfoFormat="{first_item}-{last_item} dari {all_items}" />
+        </PagerContent>
+    </MudTable>
+</MudCard>
+
+<!-- Dialog Tambah / Edit Pemasok -->
+<MudDialog @bind-Visible="_dialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="font-weight: 700;">
+            @(_isEditMode ? "Ubah Data Pemasok" : "Tambah Pemasok Baru")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            @if (!_isEditMode)
+            {
+                <MudTextField @bind-Value="_model.Code" Label="Kode Pemasok (Unik)" Required="true"
+                              Placeholder="Misal: SUP-001" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            }
+            <MudTextField @bind-Value="_model.Name" Label="Nama Vendor / Pemasok" Required="true"
+                          Placeholder="Misal: PT Krakatau Steel Tbk" Variant="Variant.Outlined" Margin="Margin.Dense" />
+
+            <div class="d-flex gap-2">
+                <MudTextField @bind-Value="_model.Email" Label="Email Kantor"
+                              Placeholder="sales@vendor.com" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-1" />
+                <MudTextField @bind-Value="_model.Phone" Label="Nomor Telepon"
+                              Placeholder="+62 21..." Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-1" />
+            </div>
+
+            <MudTextField @bind-Value="_model.Address" Label="Alamat Kantor Pemasok" Required="true" Lines="2"
+                          Placeholder="Alamat lokasi..." Variant="Variant.Outlined" Margin="Margin.Dense" />
+
+            <div class="d-flex gap-2">
+                <MudTextField @bind-Value="_model.TaxNumber" Label="NPWP Vendor"
+                              Placeholder="01.xxx.xxx.x-xxx.xxx" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-1" />
+                <MudNumericField @bind-Value="_model.PaymentTermsDays" Label="Termin Bayar (Hari)" Min="0"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-1" />
+            </div>
+
+            <MudDivider Class="my-1" />
+            <MudText Typo="Typo.subtitle2" Style="font-weight: 600; color: #475569;">
+                Informasi Rekening Bank (Untuk Pembayaran AP)
+            </MudText>
+
+            <div class="d-flex gap-2">
+                <MudTextField @bind-Value="_model.BankName" Label="Nama Bank"
+                              Placeholder="BCA / Mandiri / BNI" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-1" />
+                <MudTextField @bind-Value="_model.BankAccountNumber" Label="Nomor Rekening"
+                              Placeholder="Misal: 1234567890" Variant="Variant.Outlined" Margin="Margin.Dense" Class="flex-1" />
+            </div>
+            <MudTextField @bind-Value="_model.BankAccountName" Label="Nama Pemilik Rekening"
+                          Placeholder="Atas nama..." Variant="Variant.Outlined" Margin="Margin.Dense" />
+
+            <MudCheckBox @bind-Value="_model.IsActive" Label="Status Pemasok Aktif" Color="Color.Primary" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _dialogVisible = false">Batal</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveSupplierAsync" Disabled="_saving">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Menyimpan...</span>
+            }
+            else
+            {
+                <span>Simpan</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private MudTable<SupplierDto>? _table;
+    private string? _searchTerm;
+    private bool _loading;
+    private bool _saving;
+    private bool _dialogVisible;
+    private bool _isEditMode;
+    private SupplierFormModel _model = new();
+
+    private readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+
+    private async Task<TableData<SupplierDto>> LoadServerData(TableState state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            var query = new GetSuppliersQuery(
+                SearchTerm: _searchTerm,
+                PageNumber: state.Page + 1,
+                PageSize: state.PageSize);
+
+            var result = await Sender.Send(query, cancellationToken);
+            if (result.IsSuccess)
+            {
+                return new TableData<SupplierDto>
+                {
+                    TotalItems = result.Value.TotalCount,
+                    Items = result.Value.Items
+                };
+            }
+
+            Snackbar.Add(result.Error.Description, Severity.Error);
+            return new TableData<SupplierDto> { TotalItems = 0, Items = [] };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OnSearch() => _table?.ReloadServerData();
+
+    private void OpenCreateDialog()
+    {
+        _isEditMode = false;
+        _model = new SupplierFormModel
+        {
+            PaymentTermsDays = 30,
+            IsActive = true
+        };
+        _dialogVisible = true;
+    }
+
+    private void OpenEditDialog(SupplierDto dto)
+    {
+        _isEditMode = true;
+        _model = new SupplierFormModel
+        {
+            Id = dto.Id,
+            CompanyId = dto.CompanyId,
+            Code = dto.Code,
+            Name = dto.Name,
+            Email = dto.Email,
+            Phone = dto.Phone,
+            Address = dto.Address,
+            TaxNumber = dto.TaxNumber,
+            PaymentTermsDays = dto.PaymentTermsDays,
+            BankName = dto.BankName,
+            BankAccountNumber = dto.BankAccountNumber,
+            BankAccountName = dto.BankAccountName,
+            IsActive = dto.IsActive
+        };
+        _dialogVisible = true;
+    }
+
+    private async Task SaveSupplierAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_model.Name) || string.IsNullOrWhiteSpace(_model.Address))
+        {
+            Snackbar.Add("Nama dan alamat pemasok wajib diisi.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            if (_isEditMode)
+            {
+                var command = new UpdateSupplierCommand(
+                    Id: _model.Id!.Value,
+                    Name: _model.Name,
+                    Email: _model.Email,
+                    Phone: _model.Phone,
+                    Address: _model.Address,
+                    TaxNumber: _model.TaxNumber,
+                    PaymentTermsDays: _model.PaymentTermsDays,
+                    BankAccountName: _model.BankAccountName,
+                    BankAccountNumber: _model.BankAccountNumber,
+                    BankName: _model.BankName,
+                    IsActive: _model.IsActive);
+
+                var result = await Sender.Send(command);
+                if (result.IsSuccess)
+                {
+                    Snackbar.Add("Data pemasok berhasil diperbarui.", Severity.Success);
+                    _dialogVisible = false;
+                    _table?.ReloadServerData();
+                }
+                else
+                {
+                    Snackbar.Add(result.Error.Description, Severity.Error);
+                }
+            }
+            else
+            {
+                var companyId = (await DbContext.Companies.IgnoreQueryFilters().FirstAsync()).Id;
+
+                var command = new CreateSupplierCommand(
+                    CompanyId: companyId,
+                    Code: _model.Code,
+                    Name: _model.Name,
+                    Email: _model.Email,
+                    Phone: _model.Phone,
+                    Address: _model.Address,
+                    TaxNumber: _model.TaxNumber,
+                    PaymentTermsDays: _model.PaymentTermsDays,
+                    BankAccountName: _model.BankAccountName,
+                    BankAccountNumber: _model.BankAccountNumber,
+                    BankName: _model.BankName);
+
+                var result = await Sender.Send(command);
+                if (result.IsSuccess)
+                {
+                    Snackbar.Add("Pemasok baru berhasil didaftarkan.", Severity.Success);
+                    _dialogVisible = false;
+                    _table?.ReloadServerData();
+                }
+                else
+                {
+                    Snackbar.Add(result.Error.Description, Severity.Error);
+                }
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteSupplierAsync(SupplierDto dto)
+    {
+        bool? confirmed = await DialogService.ShowMessageBoxAsync(
+            "Konfirmasi Hapus",
+            $"Apakah Anda yakin ingin menghapus data pemasok '{dto.Name}' ({dto.Code})?",
+            yesText: "Hapus", cancelText: "Batal");
+
+        if (confirmed == true)
+        {
+            var result = await Sender.Send(new DeleteSupplierCommand(dto.Id));
+            if (result.IsSuccess)
+            {
+                Snackbar.Add("Pemasok berhasil dihapus.", Severity.Success);
+                _table?.ReloadServerData();
+            }
+            else
+            {
+                Snackbar.Add(result.Error.Description, Severity.Error);
+            }
+        }
+    }
+
+    private class SupplierFormModel
+    {
+        public Guid? Id { get; set; }
+        public Guid CompanyId { get; set; }
+        public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string? Email { get; set; }
+        public string? Phone { get; set; }
+        public string Address { get; set; } = string.Empty;
+        public string? TaxNumber { get; set; }
+        public int PaymentTermsDays { get; set; } = 30;
+        public string? BankAccountName { get; set; }
+        public string? BankAccountNumber { get; set; }
+        public string? BankName { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+}
+

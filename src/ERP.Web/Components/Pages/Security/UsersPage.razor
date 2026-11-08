@@ -1,0 +1,265 @@
+@page "/security/users"
+@inject UserManager<ApplicationUser> UserManager
+@inject RoleManager<ApplicationRole> RoleManager
+@inject ApplicationDbContext DbContext
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@using ERP.Infrastructure.Identity.Models
+@using ERP.Infrastructure.Persistence.Context
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>Manajemen Pengguna — Enterprise ERP</PageTitle>
+
+<div class="mb-4 d-flex justify-space-between align-center">
+    <div>
+        <MudText Typo="Typo.h5" Style="font-weight: 700; color: #0F172A;">
+            Manajemen Akun Pengguna & Akses
+        </MudText>
+        <MudText Typo="Typo.body2" Style="color: #64748B;">
+            Kelola kredensial operator, aktivasi akun, dan pemetaan peran enterprise.
+        </MudText>
+    </div>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="OpenCreateDialog">
+        Tambah Pengguna
+    </MudButton>
+</div>
+
+<MudCard Elevation="1" Class="rounded-lg border border-slate-200">
+    <MudTable Items="_users" Dense="true" Hover="true" Striped="true" Loading="@_loading">
+        <ToolBarContent>
+            <MudText Typo="Typo.h6" Style="font-weight: 600;">Daftar Pengguna Terdaftar</MudText>
+            <MudSpacer />
+            <MudTextField @bind-Value="_searchTerm" Placeholder="Cari nama, email..." Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Class="mt-0"
+                          Clearable="true" Immediate="true" />
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Nama Lengkap</MudTh>
+            <MudTh>Email Akun</MudTh>
+            <MudTh>Peran (Roles)</MudTh>
+            <MudTh Style="text-align: center;">Status Akun</MudTh>
+            <MudTh Style="text-align: center;">Terkunci</MudTh>
+            <MudTh>Dibuat Pada</MudTh>
+            <MudTh Style="text-align: right;">Aksi</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Nama">
+                <div class="d-flex align-center">
+                    <MudAvatar Color="Color.Primary" Size="Size.Small" Class="mr-2">
+                        @context.FullName.Substring(0, Math.Min(2, context.FullName.Length)).ToUpperInvariant()
+                    </MudAvatar>
+                    <MudText Typo="Typo.body2" Style="font-weight: 600;">@context.FullName</MudText>
+                </div>
+            </MudTd>
+            <MudTd DataLabel="Email">@context.Email</MudTd>
+            <MudTd DataLabel="Roles">
+                @foreach (var r in context.Roles)
+                {
+                    <MudChip T="string" Color="Color.Info" Size="Size.Small" Class="mr-1">@r</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Status" Style="text-align: center;">
+                @if (context.IsActive)
+                {
+                    <MudChip T="string" Color="Color.Success" Size="Size.Small">Aktif</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Color="Color.Error" Size="Size.Small">Non-aktif</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Terkunci" Style="text-align: center;">
+                @if (context.IsLockedOut)
+                {
+                    <MudChip T="string" Color="Color.Warning" Size="Size.Small">Terkunci</MudChip>
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Style="color: #94A3B8;">-</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Tanggal">@context.CreatedAtUtc.ToString("dd MMM yyyy HH:mm")</MudTd>
+            <MudTd DataLabel="Aksi" Style="text-align: right;">
+                <MudIconButton Icon="@(context.IsActive ? Icons.Material.Filled.Block : Icons.Material.Filled.CheckCircle)"
+                               Size="Size.Small" Color="@(context.IsActive ? Color.Warning : Color.Success)"
+                               OnClick="@(() => ToggleUserStatusAsync(context))" />
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[] { 10, 25, 50 }" />
+        </PagerContent>
+    </MudTable>
+</MudCard>
+
+<!-- Dialog Tambah Pengguna -->
+<MudDialog @bind-Visible="_dialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="font-weight: 700;">Tambah Pengguna Baru</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_newFullName" Label="Nama Lengkap" Required="true"
+                          Placeholder="Misal: Budi Santoso" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudTextField @bind-Value="_newEmail" Label="Email Korporat" Required="true"
+                          Placeholder="budi@enterprise.erp" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudTextField @bind-Value="_newPassword" Label="Kata Sandi Awal" Required="true" InputType="InputType.Password"
+                          Placeholder="Minimal 8 karakter..." Variant="Variant.Outlined" Margin="Margin.Dense" />
+
+            <MudSelect T="string" Label="Pilih Peran (Role)" @bind-Value="_selectedRole" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense">
+                @foreach (var r in _availableRoles)
+                {
+                    <MudSelectItem Value="@r">@r</MudSelectItem>
+                }
+            </MudSelect>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _dialogVisible = false">Batal</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateUserAsync" Disabled="_saving">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Menyimpan...</span>
+            }
+            else
+            {
+                <span>Buat Akun</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<UserViewModel> _users = [];
+    private List<string> _availableRoles = [];
+    private string? _searchTerm;
+    private bool _loading = true;
+    private bool _saving;
+    private bool _dialogVisible;
+
+    private string _newFullName = string.Empty;
+    private string _newEmail = string.Empty;
+    private string _newPassword = string.Empty;
+    private string _selectedRole = "EMPLOYEE";
+
+    private readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _loading = true;
+        try
+        {
+            var rawUsers = await UserManager.Users.OrderBy(u => u.Email).ToListAsync();
+            var list = new List<UserViewModel>();
+
+            foreach (var u in rawUsers)
+            {
+                var roles = await UserManager.GetRolesAsync(u);
+                var isLocked = u.LockoutEnd.HasValue && u.LockoutEnd.Value > DateTimeOffset.UtcNow;
+                list.Add(new UserViewModel(u.Id, u.FullName, u.Email ?? "", roles.ToList(), u.IsActive, isLocked, u.CreatedAtUtc));
+            }
+
+            _users = list;
+            _availableRoles = await RoleManager.Roles.Select(r => r.Name!).ToListAsync();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OpenCreateDialog()
+    {
+        _newFullName = string.Empty;
+        _newEmail = string.Empty;
+        _newPassword = string.Empty;
+        _selectedRole = _availableRoles.FirstOrDefault() ?? "EMPLOYEE";
+        _dialogVisible = true;
+    }
+
+    private async Task CreateUserAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newFullName) || string.IsNullOrWhiteSpace(_newEmail) || string.IsNullOrWhiteSpace(_newPassword))
+        {
+            Snackbar.Add("Mohon lengkapi seluruh field formulir.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var user = new ApplicationUser
+            {
+                Id = Guid.NewGuid(),
+                FullName = _newFullName.Trim(),
+                UserName = _newEmail.Trim(),
+                Email = _newEmail.Trim(),
+                EmailConfirmed = true,
+                IsActive = true,
+                CreatedAtUtc = DateTime.UtcNow
+            };
+
+            var result = await UserManager.CreateAsync(user, _newPassword);
+            if (result.Succeeded)
+            {
+                if (!string.IsNullOrEmpty(_selectedRole))
+                {
+                    await UserManager.AddToRoleAsync(user, _selectedRole);
+                }
+
+                // Hubungkan ke cabang default
+                var branch = await DbContext.Branches.IgnoreQueryFilters().FirstOrDefaultAsync();
+                if (branch != null)
+                {
+                    DbContext.UserBranches.Add(new UserBranch
+                    {
+                        UserId = user.Id,
+                        BranchId = branch.Id,
+                        IsDefault = true
+                    });
+                    await DbContext.SaveChangesAsync();
+                }
+
+                Snackbar.Add("Pengguna baru berhasil dibuat.", Severity.Success);
+                _dialogVisible = false;
+                await LoadDataAsync();
+            }
+            else
+            {
+                Snackbar.Add(string.Join(", ", result.Errors.Select(e => e.Description)), Severity.Error);
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ToggleUserStatusAsync(UserViewModel userVm)
+    {
+        var user = await UserManager.FindByIdAsync(userVm.Id.ToString());
+        if (user != null)
+        {
+            user.IsActive = !user.IsActive;
+            await UserManager.UpdateAsync(user);
+            Snackbar.Add($"Status akun '{user.Email}' berhasil diubah.", Severity.Success);
+            await LoadDataAsync();
+        }
+    }
+
+    private record UserViewModel(
+        Guid Id,
+        string FullName,
+        string Email,
+        List<string> Roles,
+        bool IsActive,
+        bool IsLockedOut,
+        DateTime CreatedAtUtc);
+}
+

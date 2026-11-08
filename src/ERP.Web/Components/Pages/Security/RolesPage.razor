@@ -1,0 +1,207 @@
+@page "/security/roles"
+@inject RoleManager<ApplicationRole> RoleManager
+@inject ApplicationDbContext DbContext
+@inject ISnackbar Snackbar
+@using ERP.Infrastructure.Identity.Models
+@using ERP.Infrastructure.Persistence.Context
+@using ERP.Shared.Security
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>Peran & Matriks Izin (PBAC) — Enterprise ERP</PageTitle>
+
+<div class="mb-4 d-flex justify-space-between align-center">
+    <div>
+        <MudText Typo="Typo.h5" Style="font-weight: 700; color: #0F172A;">
+            Peran & Matriks Izin Akses (PBAC)
+        </MudText>
+        <MudText Typo="Typo.body2" Style="color: #64748B;">
+            Konfigurasi wadah peran enterprise dan izin granular operasi transaksi.
+        </MudText>
+    </div>
+</div>
+
+<MudGrid>
+    <!-- Kolom Kiri: Daftar Peran -->
+    <MudItem xs="12" md="4">
+        <MudCard Elevation="1" Class="rounded-lg border border-slate-200">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6" Style="font-weight: 600;">Daftar Peran (Roles)</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent Class="pa-0">
+                <MudList T="string" Dense="true" SelectedValue="@_selectedRoleName" SelectedValueChanged="OnRoleSelected">
+                    @foreach (var role in _roles)
+                    {
+                        <MudListItem Value="@role.Name" Icon="@Icons.Material.Filled.Security"
+                                     Class="@(_selectedRoleName == role.Name ? "mud-theme-primary" : "")">
+                            <div class="d-flex justify-space-between align-center">
+                                <div>
+                                    <MudText Typo="Typo.body2" Style="font-weight: 600;">@role.Name</MudText>
+                                    <MudText Typo="Typo.caption" Style="color: #64748B;">@role.Description</MudText>
+                                </div>
+                                <MudBadge Content="@role.PermissionCount" Color="Color.Primary" Class="ml-2" />
+                            </div>
+                        </MudListItem>
+                        <MudDivider />
+                    }
+                </MudList>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <!-- Kolom Kanan: Matriks Izin Granular -->
+    <MudItem xs="12" md="8">
+        <MudCard Elevation="1" Class="rounded-lg border border-slate-200">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <div class="d-flex justify-space-between align-center">
+                        <div>
+                            <MudText Typo="Typo.h6" Style="font-weight: 600;">
+                                Matriks Izin untuk Peran: <span style="color: #1E3A8A;">@_selectedRoleName</span>
+                            </MudText>
+                            <MudText Typo="Typo.caption" Style="color: #64748B;">
+                                Centang izin operasi yang ingin diberikan kepada kelompok peran ini.
+                            </MudText>
+                        </div>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                                   OnClick="SaveRolePermissionsAsync" Disabled="_saving">
+                            Simpan Perubahan
+                        </MudButton>
+                    </div>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                @foreach (var group in _permissionsByModule)
+                {
+                    <div class="mb-4">
+                        <MudText Typo="Typo.subtitle2" Style="font-weight: 700; color: #1E3A8A; text-transform: uppercase; letter-spacing: 0.5px;" Class="mb-2">
+                            Modul @group.Key
+                        </MudText>
+                        <MudGrid Spacing="2">
+                            @foreach (var perm in group.Value)
+                            {
+                                <MudItem xs="12" sm="6">
+                                    <div class="d-flex align-center pa-2 rounded border border-slate-200" style="background-color: #F8FAFC;">
+                                        <MudCheckBox T="bool" Value="@_currentGrantedPermIds.Contains(perm.Id)"
+                                                     ValueChanged="@((val) => TogglePermission(perm.Id, val))"
+                                                     Color="Color.Primary" Dense="true" Class="mr-2" />
+                                        <div>
+                                            <MudText Typo="Typo.body2" Style="font-weight: 600; font-size: 0.82rem;">
+                                                @perm.Code
+                                            </MudText>
+                                            <MudText Typo="Typo.caption" Style="color: #64748B; font-size: 0.72rem; display: block;">
+                                                @perm.Description
+                                            </MudText>
+                                        </div>
+                                    </div>
+                                </MudItem>
+                            }
+                        </MudGrid>
+                    </div>
+                }
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private List<RoleItemModel> _roles = [];
+    private string _selectedRoleName = Roles.SuperAdmin;
+    private Guid _selectedRoleId;
+    private Dictionary<string, List<Permission>> _permissionsByModule = [];
+    private HashSet<Guid> _currentGrantedPermIds = [];
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRolesAndPermissionsAsync();
+    }
+
+    private async Task LoadRolesAndPermissionsAsync()
+    {
+        var rawRoles = await RoleManager.Roles.OrderBy(r => r.Name).ToListAsync();
+        var allPerms = await DbContext.Permissions.OrderBy(p => p.Module).ThenBy(p => p.Code).ToListAsync();
+        _permissionsByModule = allPerms.GroupBy(p => p.Module).ToDictionary(g => g.Key, g => g.ToList());
+
+        var roleCounts = await DbContext.RolePermissions
+            .GroupBy(rp => rp.RoleId)
+            .Select(g => new { RoleId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.RoleId, x => x.Count);
+
+        _roles = rawRoles.Select(r => new RoleItemModel(
+            r.Id,
+            r.Name ?? "",
+            r.Description ?? "",
+            roleCounts.GetValueOrDefault(r.Id, 0))).ToList();
+
+        var currentRole = _roles.FirstOrDefault(r => r.Name == _selectedRoleName) ?? _roles.FirstOrDefault();
+        if (currentRole != null)
+        {
+            _selectedRoleName = currentRole.Name;
+            _selectedRoleId = currentRole.Id;
+            await LoadGrantedPermissionsForCurrentRoleAsync();
+        }
+    }
+
+    private async Task OnRoleSelected(string roleName)
+    {
+        _selectedRoleName = roleName;
+        var r = _roles.FirstOrDefault(x => x.Name == roleName);
+        if (r != null)
+        {
+            _selectedRoleId = r.Id;
+            await LoadGrantedPermissionsForCurrentRoleAsync();
+        }
+    }
+
+    private async Task LoadGrantedPermissionsForCurrentRoleAsync()
+    {
+        var grantedIds = await DbContext.RolePermissions
+            .Where(rp => rp.RoleId == _selectedRoleId)
+            .Select(rp => rp.PermissionId)
+            .ToListAsync();
+
+        _currentGrantedPermIds = grantedIds.ToHashSet();
+    }
+
+    private void TogglePermission(Guid permId, bool granted)
+    {
+        if (granted) _currentGrantedPermIds.Add(permId);
+        else _currentGrantedPermIds.Remove(permId);
+    }
+
+    private async Task SaveRolePermissionsAsync()
+    {
+        _saving = true;
+        try
+        {
+            var existing = await DbContext.RolePermissions
+                .Where(rp => rp.RoleId == _selectedRoleId)
+                .ToListAsync();
+
+            DbContext.RolePermissions.RemoveRange(existing);
+
+            var newAssignments = _currentGrantedPermIds.Select(pId => new RolePermission
+            {
+                RoleId = _selectedRoleId,
+                PermissionId = pId,
+                GrantedAtUtc = DateTime.UtcNow
+            });
+
+            DbContext.RolePermissions.AddRange(newAssignments);
+            await DbContext.SaveChangesAsync();
+
+            Snackbar.Add($"Matriks izin untuk peran '{_selectedRoleName}' berhasil disimpan.", Severity.Success);
+            await LoadRolesAndPermissionsAsync();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private record RoleItemModel(Guid Id, string Name, string Description, int PermissionCount);
+}
+
