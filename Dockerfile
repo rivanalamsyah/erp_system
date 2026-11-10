@@ -36,3 +36,4 @@ ENV ASPNETCORE_ENVIRONMENT=Production
 
 COPY --from=publish /app/publish .
 ENTRYPOINT ["dotnet", "ERP.Web.dll"]
+

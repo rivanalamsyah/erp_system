@@ -89,3 +89,4 @@ Get-ChildItem -Path $OutputDirectory -Filter "${DatabaseName}_backup_*.dump" | W
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host " Backup Finished Successfully" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
+

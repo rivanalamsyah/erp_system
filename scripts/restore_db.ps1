@@ -96,3 +96,4 @@ Write-Host "[SUCCESS] Restoration completed in $($Stopwatch.Elapsed.TotalSeconds
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host " Database Restore Completed" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
+

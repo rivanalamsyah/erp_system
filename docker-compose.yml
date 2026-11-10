@@ -56,3 +56,4 @@ networks:
   erp-network:
     name: erp_internal_network
     driver: bridge
+
