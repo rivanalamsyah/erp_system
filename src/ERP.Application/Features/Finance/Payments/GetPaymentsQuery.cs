@@ -8,7 +8,7 @@ using ERP.Shared.Security;
 
 namespace ERP.Application.Features.Finance.Payments;
 
-[RequirePermission(Permissions.Finance.PaymentProcess)]
+[RequirePermission(Permissions.Finance.PaymentView)]
 public record GetPaymentsQuery(
     string? PaymentType = null,
     string? SearchTerm = null,

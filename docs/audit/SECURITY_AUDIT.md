@@ -153,3 +153,4 @@ b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empt
   Secara otomatis menyaring data agar pengguna Cabang A tidak dapat melihat atau memodifikasi data Cabang B.
 - **Catatan Peningkatan:**
   Pastikan bahwa `currentUserService.CompanyId` tidak dapat dimanipulasi melalui request payload. Seluruh Command Handler harus mengambil CompanyId dari `CurrentUserService.CompanyId` terautentikasi dan menolak payload yang mencoba meng-override CompanyId lain.
+

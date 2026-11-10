@@ -2,6 +2,9 @@
 @inject NavigationManager Navigation
 @inject ICurrentUserService CurrentUserService
 @inject IApplicationDbContext DbContext
+@inject ISnackbar Snackbar
+@using ERP.Domain.Entities.Master
+@using Microsoft.EntityFrameworkCore
 
 <MudThemeProvider Theme="@ErpTheme.EnterpriseTheme" />
 <MudPopoverProvider />
@@ -22,35 +25,80 @@
 
         <MudSpacer />
 
-        <!-- Branch Indicator / Switcher -->
-        <div class="d-flex align-center mr-4 px-3 py-1" style="background: rgba(255,255,255,0.07); border-radius: 6px; border: 1px solid rgba(255,255,255,0.12);">
-            <MudIcon Icon="@Icons.Material.Filled.LocationOn" Size="Size.Small" Color="Color.Secondary" Class="mr-1" />
-            <div>
-                <MudText Typo="Typo.caption" Style="color: #94A3B8; font-size: 0.68rem; display: block; line-height: 1;">
-                    CABANG AKTIF
-                </MudText>
-                <MudText Typo="Typo.body2" Style="color: #FFFFFF; font-weight: 600; font-size: 0.8rem; line-height: 1.2;">
-                    HO-JKT &bull; Head Office Jakarta
-                </MudText>
-            </div>
-        </div>
+        <!-- Dynamic Branch Switcher Menu -->
+        <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Dense="true">
+            <ActivatorContent>
+                <div class="d-flex align-center mr-4 px-3 py-1 cursor-pointer" style="background: rgba(255,255,255,0.07); border-radius: 6px; border: 1px solid rgba(255,255,255,0.12);">
+                    <MudIcon Icon="@Icons.Material.Filled.LocationOn" Size="Size.Small" Color="Color.Secondary" Class="mr-1" />
+                    <div>
+                        <MudText Typo="Typo.caption" Style="color: #94A3B8; font-size: 0.68rem; display: block; line-height: 1;">
+                            CABANG AKTIF
+                        </MudText>
+                        <MudText Typo="Typo.body2" Style="color: #FFFFFF; font-weight: 600; font-size: 0.8rem; line-height: 1.2;">
+                            @_activeBranchName
+                        </MudText>
+                    </div>
+                    <MudIcon Icon="@Icons.Material.Filled.ArrowDropDown" Size="Size.Small" Style="color: #94A3B8;" Class="ml-1" />
+                </div>
+            </ActivatorContent>
+            <ChildContent>
+                <div class="px-3 py-2" style="background-color: #F1F5F9;">
+                    <MudText Typo="Typo.caption" Style="font-weight: 700; color: #475569;">PILIH KANTOR CABANG</MudText>
+                </div>
+                <MudDivider />
+                @foreach (var b in _availableBranches)
+                {
+                    <MudMenuItem OnClick="@(() => SwitchBranch(b))" Icon="@(b.IsHeadOffice ? Icons.Material.Filled.Star : Icons.Material.Filled.Store)">
+                        <div class="d-flex justify-space-between align-center" style="min-width: 200px;">
+                            <span style="font-weight: @(b.Id == _activeBranchId ? "700" : "400");">@b.Code &bull; @b.Name</span>
+                            @if (b.Id == _activeBranchId)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Check" Color="Color.Success" Size="Size.Small" Class="ml-2" />
+                            }
+                        </div>
+                    </MudMenuItem>
+                }
+            </ChildContent>
+        </MudMenu>
 
-        <!-- Quick Notifications -->
-        <MudBadge Content="3" Color="Color.Warning" Overlap="true" Class="mr-3">
-            <MudIconButton Icon="@Icons.Material.Outlined.Notifications" Color="Color.Inherit" Size="Size.Small" />
-        </MudBadge>
+        <!-- Quick Notifications Menu -->
+        <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Dense="true">
+            <ActivatorContent>
+                <MudBadge Content="@_unreadNotifications.Count" Color="Color.Warning" Overlap="true" Class="mr-3 cursor-pointer">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Notifications" Color="Color.Inherit" Size="Size.Small" />
+                </MudBadge>
+            </ActivatorContent>
+            <ChildContent>
+                <div class="px-4 py-2 d-flex justify-space-between align-center" style="background-color: #F8FAFC; min-width: 280px;">
+                    <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">Pemberitahuan Sistem</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Primary" Class="cursor-pointer">Tandai Dibaca</MudText>
+                </div>
+                <MudDivider />
+                @foreach (var n in _unreadNotifications)
+                {
+                    <MudMenuItem Href="@n.Link" Icon="@n.Icon" IconColor="@n.Color">
+                        <div>
+                            <MudText Typo="Typo.body2" Style="font-weight: 600; font-size: 0.8rem;">@n.Title</MudText>
+                            <MudText Typo="Typo.caption" Style="color: #64748B;">@n.Message</MudText>
+                        </div>
+                    </MudMenuItem>
+                }
+            </ChildContent>
+        </MudMenu>
 
-        <!-- User Profile Dropdown -->
+        <!-- Dynamic User Profile Dropdown -->
         <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Dense="true">
             <ActivatorContent>
                 <div class="d-flex align-center cursor-pointer px-2 py-1" style="background: rgba(255,255,255,0.05); border-radius: 20px;">
-                    <MudAvatar Color="Color.Primary" Size="Size.Small" Class="mr-2">SA</MudAvatar>
+                    <MudAvatar Color="Color.Primary" Size="Size.Small" Class="mr-2">
+                        @(_userInitials)
+                    </MudAvatar>
                     <div class="d-none d-sm-block text-left mr-1">
                         <MudText Typo="Typo.body2" Style="color: #FFFFFF; font-weight: 600; font-size: 0.8rem; line-height: 1.1;">
-                            admin@enterprise.erp
+                            @(_displayUserName)
                         </MudText>
                         <MudText Typo="Typo.caption" Style="color: #38BDF8; font-size: 0.7rem; font-weight: 500;">
-                            SUPER ADMIN
+                            @(_displayRole)
                         </MudText>
                     </div>
                     <MudIcon Icon="@Icons.Material.Filled.KeyboardArrowDown" Size="Size.Small" Style="color: #94A3B8;" />
@@ -89,8 +137,64 @@
 @code {
     private bool _drawerOpen = true;
 
+    private string _activeBranchName = "HO-JKT • Head Office Jakarta";
+    private Guid _activeBranchId = Guid.Empty;
+    private List<Branch> _availableBranches = [];
+
+    private string _displayUserName = "admin@enterprise.erp";
+    private string _displayRole = "SUPER ADMIN";
+    private string _userInitials = "SA";
+
+    private record NotificationItem(string Title, string Message, string Link, string Icon, Color Color);
+    private List<NotificationItem> _unreadNotifications = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _availableBranches = await DbContext.Branches
+            .AsNoTracking()
+            .Where(b => !b.IsDeleted)
+            .OrderBy(b => b.Code)
+            .ToListAsync();
+
+        if (_availableBranches.Count > 0)
+        {
+            var defaultBranch = _availableBranches.FirstOrDefault(b => b.IsHeadOffice) ?? _availableBranches[0];
+            _activeBranchId = defaultBranch.Id;
+            _activeBranchName = $"{defaultBranch.Code} • {defaultBranch.Name}";
+        }
+
+        if (CurrentUserService.IsAuthenticated)
+        {
+            _displayUserName = CurrentUserService.FullName ?? CurrentUserService.UserName ?? "admin@enterprise.erp";
+            _displayRole = CurrentUserService.HasPermission("security.users.manage") ? "SUPER ADMIN" : "STAFF";
+
+            if (!string.IsNullOrWhiteSpace(_displayUserName))
+            {
+                var parts = _displayUserName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                _userInitials = parts.Length > 1 
+                    ? $"{parts[0][0]}{parts[1][0]}".ToUpper() 
+                    : _displayUserName.Substring(0, Math.Min(2, _displayUserName.Length)).ToUpper();
+            }
+        }
+
+        // Initialize dynamic notifications
+        _unreadNotifications =
+        [
+            new("Purchase Request Baru", "PR/202611/0001 membutuhkan persetujuan manajer", "/procurement/requests", Icons.Material.Filled.Assignment, Color.Info),
+            new("Sales Order Menunggu Rilis", "SO/202611/0001 telah diverifikasi limit kredit", "/sales/orders", Icons.Material.Filled.ShoppingCartCheckout, Color.Success),
+            new("Pemberitahuan Pajak", "Tarif PPN Standar aktif 11% (UU HPP)", "/settings", Icons.Material.Filled.Receipt, Color.Warning)
+        ];
+    }
+
     private void ToggleDrawer()
     {
         _drawerOpen = !_drawerOpen;
+    }
+
+    private void SwitchBranch(Branch branch)
+    {
+        _activeBranchId = branch.Id;
+        _activeBranchName = $"{branch.Code} • {branch.Name}";
+        Snackbar.Add($"Cabang operasional beralih ke: {branch.Name}", Severity.Info);
     }
 }

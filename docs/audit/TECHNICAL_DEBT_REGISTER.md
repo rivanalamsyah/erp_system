@@ -50,3 +50,4 @@ Total estimasi utang teknis adalah **88 Jam Kerja (~11 Hari Kerja)**. Strategi p
 1. **Sprint 1 (Kritikal & Fondasi - 24 Jam):** Pelunasan `DEBT-001`, `DEBT-002`, `DEBT-003`, `DEBT-006`, `DEBT-007`, `DEBT-017`.
 2. **Sprint 2 (Fungsional & Usability - 32 Jam):** Pelunasan `DEBT-004`, `DEBT-010`, `DEBT-013`, `DEBT-014`, `DEBT-015`.
 3. **Sprint 3 (Integrasi & Otomasi - 32 Jam):** Pelunasan `DEBT-005`, `DEBT-011`, `DEBT-012`, `DEBT-016`.
+

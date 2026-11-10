@@ -1,0 +1,300 @@
+@page "/master/departments"
+@inject ISender Sender
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IApplicationDbContext DbContext
+@using ERP.Application.Features.Master.Departments
+@using ERP.Domain.Entities.Master
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>Master Departemen — Enterprise ERP</PageTitle>
+
+<div class="mb-4 d-flex justify-space-between align-center">
+    <div>
+        <MudText Typo="Typo.h5" Style="font-weight: 700; color: #0F172A;">
+            Master Departemen Organisasi
+        </MudText>
+        <MudText Typo="Typo.body2" Style="color: #64748B;">
+            Kelola struktur departemen, unit kerja, dan alokasi divisi operasional per perusahaan.
+        </MudText>
+    </div>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+        Tambah Departemen
+    </MudButton>
+</div>
+
+<MudCard Elevation="1" Class="rounded-lg border border-slate-200">
+    <MudTable ServerData="LoadServerData" @ref="_table" Dense="true" Hover="true" Striped="true" Loading="@_loading">
+        <ToolBarContent>
+            <MudText Typo="Typo.h6" Style="font-weight: 600;">Daftar Departemen</MudText>
+            <MudSpacer />
+            <MudSelect T="Guid?" Label="Filter Perusahaan" @bind-Value="_selectedCompanyFilter" Dense="true" Margin="Margin.Dense"
+                       Class="mr-4" Style="max-width: 250px;" SelectedValuesChanged="OnFilterChanged" Clearable="true">
+                @foreach (var c in _companies)
+                {
+                    <MudSelectItem Value="@((Guid?)c.Id)">@c.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudTextField @bind-Value="_searchTerm" Placeholder="Cari kode atau nama..." Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Class="mt-0"
+                          Clearable="true" Immediate="true" OnKeyUp="OnSearch" DebounceInterval="300" />
+        </ToolBarContent>
+        <HeaderContent>
+            <MudTh>Kode Departemen</MudTh>
+            <MudTh>Nama Departemen</MudTh>
+            <MudTh>Perusahaan</MudTh>
+            <MudTh>Tanggal Dibuat</MudTh>
+            <MudTh Style="text-align: right;">Aksi</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Kode">
+                <MudChip T="string" Color="Color.Primary" Variant="Variant.Outlined" Size="Size.Small">
+                    @context.Code
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="Nama">
+                <MudText Typo="Typo.body2" Style="font-weight: 600;">@context.Name</MudText>
+            </MudTd>
+            <MudTd DataLabel="Perusahaan">@context.CompanyName</MudTd>
+            <MudTd DataLabel="Tgl Dibuat">@context.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudTd>
+            <MudTd DataLabel="Aksi" Style="text-align: right;">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary"
+                               OnClick="@(() => OpenEditDialog(context))" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => DeleteDepartmentAsync(context))" />
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <div class="pa-8 text-center">
+                <MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Large" Color="Color.Default" Class="mb-2" />
+                <MudText Typo="Typo.body1" Style="font-weight: 600;">Belum ada departemen terdaftar</MudText>
+            </div>
+        </NoRecordsContent>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[] { 10, 25, 50 }" InfoFormat="{first_item}-{last_item} dari {all_items}" />
+        </PagerContent>
+    </MudTable>
+</MudCard>
+
+@* Dialog Tambah/Ubah Departemen *@
+<MudDialog @bind-Visible="_dialogOpen" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="font-weight: 700;">
+            @(_isEdit ? "Ubah Data Departemen" : "Tambah Departemen Baru")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            @if (!_isEdit)
+            {
+                <MudSelect T="Guid" Label="Perusahaan Induk *" @bind-Value="_formModel.CompanyId" Required="true"
+                           Dense="true" Margin="Margin.Dense">
+                    @foreach (var c in _companies)
+                    {
+                        <MudSelectItem Value="@c.Id">@c.Name (@c.Code)</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudTextField Label="Kode Departemen *" @bind-Value="_formModel.Code" Required="true"
+                              Placeholder="Misal: HRD, FIN, ENG, IT" Margin="Margin.Dense" />
+            }
+            <MudTextField Label="Nama Departemen *" @bind-Value="_formModel.Name" Required="true"
+                          Placeholder="Misal: Human Resources & GA" Margin="Margin.Dense" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _dialogOpen = false)">Batal</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveDepartmentAsync" Disabled="@_saving">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Simpan
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private MudTable<DepartmentDto>? _table;
+    private bool _loading = false;
+    private bool _saving = false;
+    private bool _dialogOpen = false;
+    private bool _isEdit = false;
+    private string? _searchTerm;
+    private Guid? _selectedCompanyFilter;
+    private List<Company> _companies = [];
+
+    private FormDepartmentModel _formModel = new();
+    private readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Small, FullWidth = true };
+
+    private class FormDepartmentModel
+    {
+        public Guid Id { get; set; }
+        public Guid CompanyId { get; set; }
+        public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _companies = await DbContext.Companies.AsNoTracking().Where(c => !c.IsDeleted).ToListAsync();
+        if (_companies.Count > 0)
+        {
+            _formModel.CompanyId = _companies[0].Id;
+        }
+    }
+
+    private async Task<TableData<DepartmentDto>> LoadServerData(TableState state, CancellationToken token)
+    {
+        _loading = true;
+        try
+        {
+            var result = await Sender.Send(new GetDepartmentsQuery(
+                CompanyId: _selectedCompanyFilter,
+                SearchTerm: _searchTerm,
+                PageNumber: state.Page + 1,
+                PageSize: state.PageSize), token);
+
+            if (result.IsSuccess)
+            {
+                return new TableData<DepartmentDto>
+                {
+                    Items = result.Value.Items,
+                    TotalItems = (int)result.Value.TotalCount
+                };
+            }
+            Snackbar.Add(result.Error.Message, Severity.Error);
+            return new TableData<DepartmentDto> { Items = [], TotalItems = 0 };
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Gagal memuat data: {ex.Message}", Severity.Error);
+            return new TableData<DepartmentDto> { Items = [], TotalItems = 0 };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OnFilterChanged()
+    {
+        _table?.ReloadServerData();
+    }
+
+    private void OnSearch(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _table?.ReloadServerData();
+        }
+    }
+
+    private void OpenCreateDialog()
+    {
+        _isEdit = false;
+        _formModel = new FormDepartmentModel
+        {
+            CompanyId = _selectedCompanyFilter ?? _companies.FirstOrDefault()?.Id ?? Guid.Empty,
+            Code = string.Empty,
+            Name = string.Empty
+        };
+        _dialogOpen = true;
+    }
+
+    private void OpenEditDialog(DepartmentDto dept)
+    {
+        _isEdit = true;
+        _formModel = new FormDepartmentModel
+        {
+            Id = dept.Id,
+            CompanyId = dept.CompanyId,
+            Code = dept.Code,
+            Name = dept.Name
+        };
+        _dialogOpen = true;
+    }
+
+    private async Task SaveDepartmentAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_formModel.Name))
+        {
+            Snackbar.Add("Nama departemen wajib diisi.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            if (_isEdit)
+            {
+                var result = await Sender.Send(new UpdateDepartmentCommand(_formModel.Id, _formModel.Name));
+                if (result.IsSuccess)
+                {
+                    Snackbar.Add("Data departemen berhasil diperbarui.", Severity.Success);
+                    _dialogOpen = false;
+                    await _table!.ReloadServerData();
+                }
+                else
+                {
+                    Snackbar.Add(result.Error.Message, Severity.Error);
+                }
+            }
+            else
+            {
+                if (_formModel.CompanyId == Guid.Empty || string.IsNullOrWhiteSpace(_formModel.Code))
+                {
+                    Snackbar.Add("Perusahaan dan Kode departemen wajib diisi.", Severity.Warning);
+                    return;
+                }
+
+                var result = await Sender.Send(new CreateDepartmentCommand(
+                    _formModel.CompanyId,
+                    _formModel.Code,
+                    _formModel.Name));
+
+                if (result.IsSuccess)
+                {
+                    Snackbar.Add("Departemen baru berhasil disimpan.", Severity.Success);
+                    _dialogOpen = false;
+                    await _table!.ReloadServerData();
+                }
+                else
+                {
+                    Snackbar.Add(result.Error.Message, Severity.Error);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Terjadi kesalahan: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteDepartmentAsync(DepartmentDto dept)
+    {
+        bool? confirm = await DialogService.ShowMessageBoxAsync(
+            "Konfirmasi Hapus",
+            $"Apakah Anda yakin ingin menghapus departemen '{dept.Name}' ({dept.Code})?",
+            yesText: "Hapus",
+            cancelText: "Batal");
+
+        if (confirm == true)
+        {
+            var result = await Sender.Send(new DeleteDepartmentCommand(dept.Id));
+            if (result.IsSuccess)
+            {
+                Snackbar.Add("Departemen berhasil dihapus.", Severity.Success);
+                await _table!.ReloadServerData();
+            }
+            else
+            {
+                Snackbar.Add(result.Error.Message, Severity.Error);
+            }
+        }
+    }
+}
+

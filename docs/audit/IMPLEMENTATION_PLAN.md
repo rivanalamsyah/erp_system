@@ -103,3 +103,4 @@ flowchart LR
 $$\text{Total Estimasi Jam Kerja} = 145 \text{ Jam} \approx 18 \text{ Hari Kerja (Tim 2 Engineer)}$$
 
 Dengan pembagian kerja paralel (Backend/DevOps dan Frontend/QA), seluruh fase remediasi dapat diselesaikan secara penuh dalam kurun waktu **3,5 Minggu Kalender**.
+

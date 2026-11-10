@@ -7,7 +7,7 @@ using ERP.Shared.Security;
 
 namespace ERP.Application.Features.Finance.JournalEntries;
 
-[RequirePermission(Permissions.Finance.JournalCreate)]
+[RequirePermission(Permissions.Finance.JournalView)]
 public record GetJournalEntriesQuery(
     string? SearchTerm = null,
     int PageNumber = 1,

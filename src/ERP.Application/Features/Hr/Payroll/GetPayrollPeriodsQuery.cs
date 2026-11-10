@@ -1,10 +1,13 @@
 using ERP.Application.Common.Interfaces;
+using ERP.Application.Common.Security;
 using ERP.Shared;
+using ERP.Shared.Security;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Application.Features.Hr.Payroll;
 
+[RequirePermission(Permissions.Hr.PayrollView)]
 public record GetPayrollPeriodsQuery(Guid? CompanyId = null) : IRequest<Result<List<PayrollPeriodDto>>>;
 
 public class GetPayrollPeriodsQueryHandler : IRequestHandler<GetPayrollPeriodsQuery, Result<List<PayrollPeriodDto>>>

@@ -69,3 +69,4 @@ Sebelum rilis produksi, tim QA wajib menjalankan checklist pengujian berikut:
 2. **Security Automated Scan:** Verifikasi kerentanan paket NuGet (`dotnet list package --vulnerable`).
 3. **Database Integrity Verification:** Validasi skema dan constraint menggunakan skrip migrasi EF Core.
 4. **Smoke Testing Manual (32 Skenario):** Pengujian alur transaksi di 9 modul oleh perwakilan bisnis (UAT).
+

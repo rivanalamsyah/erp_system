@@ -1,10 +1,13 @@
 using ERP.Application.Common.Interfaces;
+using ERP.Application.Common.Security;
 using ERP.Shared;
+using ERP.Shared.Security;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Application.Features.Hr.Leaves;
 
+[RequirePermission(Permissions.Hr.LeaveView)]
 public record GetLeaveRequestsQuery(Guid? EmployeeId = null) : IRequest<Result<List<LeaveRequestDto>>>;
 
 public class GetLeaveRequestsQueryHandler : IRequestHandler<GetLeaveRequestsQuery, Result<List<LeaveRequestDto>>>

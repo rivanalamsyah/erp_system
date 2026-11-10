@@ -1,0 +1,34 @@
+name: Enterprise ERP — Continuous Integration & Quality Pipeline
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  build-and-test:
+    name: Build, Static Analysis & Automated Testing
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET 10 LTS SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Restore NuGet Dependencies
+      run: dotnet restore EnterpriseERP.slnx
+
+    - name: Compile Solution (Release Mode)
+      run: dotnet build EnterpriseERP.slnx -c Release --no-restore /p:TreatWarningsAsErrors=true
+
+    - name: Execute Automated Test Suite (Domain, Application, Integration, Architecture)
+      run: dotnet test EnterpriseERP.slnx -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage"
+
+    - name: Verify Docker Container Build
+      run: docker build -t enterprise-erp:${{ github.sha }} .
+

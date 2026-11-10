@@ -7,7 +7,7 @@ using ERP.Shared.Security;
 
 namespace ERP.Application.Features.Finance.ChartOfAccounts;
 
-[RequirePermission(Permissions.Finance.CoaManage)]
+[RequirePermission(Permissions.Finance.CoaView)]
 public record GetChartOfAccountsQuery(
     string? AccountType = null,
     string? SearchTerm = null) : IRequest<Result<IReadOnlyList<ChartOfAccountDto>>>;

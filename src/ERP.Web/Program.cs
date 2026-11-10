@@ -1,3 +1,4 @@
+using System.Threading.RateLimiting;
 using ERP.Application;
 using ERP.Infrastructure;
 using ERP.Infrastructure.Identity.Models;
@@ -5,6 +6,7 @@ using ERP.Infrastructure.Persistence.Seeders;
 using ERP.Web.Components;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,9 +18,43 @@ builder.Services.AddInfrastructureServices(builder.Configuration);
 // Add MudBlazor services
 builder.Services.AddMudServices();
 
-// Add Blazor and Authentication state
+// Rate Limiting Policy for Authentication Endpoints
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddFixedWindowLimiter("LoginPolicy", opt =>
+    {
+        opt.PermitLimit = 5;
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        opt.QueueLimit = 0;
+    });
+});
+
+// Configure Secure Antiforgery Cookie
+builder.Services.AddAntiforgery(options =>
+{
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    options.Cookie.SameSite = SameSiteMode.Strict;
+    options.Cookie.HttpOnly = true;
+});
+
+// Add Blazor Server with optimized circuit retention and SignalR resilience
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+    .AddInteractiveServerComponents(options =>
+    {
+        options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(5);
+        options.DisconnectedCircuitMaxRetained = 500;
+        options.DetailedErrors = builder.Environment.IsDevelopment();
+    });
+
+builder.Services.AddSignalR(hubOptions =>
+{
+    hubOptions.MaximumReceiveMessageSize = 1024 * 1024; // 1 MB
+    hubOptions.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    hubOptions.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+    hubOptions.EnableDetailedErrors = builder.Environment.IsDevelopment();
+});
 
 builder.Services.AddCascadingAuthenticationState();
 
@@ -41,12 +77,14 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 
+app.UseRateLimiter();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.UseAntiforgery();
 
-// Authentication Endpoints
+// Authentication Endpoints with CSRF Protection & Rate Limiting
 app.MapPost("/api/auth/login", async (
     [FromForm] string email,
     [FromForm] string password,
@@ -71,7 +109,7 @@ app.MapPost("/api/auth/login", async (
     }
 
     return Results.Redirect("/login?error=invalid_credentials");
-}).DisableAntiforgery();
+}).RequireRateLimiting("LoginPolicy");
 
 app.MapPost("/api/auth/logout", async (SignInManager<ApplicationUser> signInManager) =>
 {

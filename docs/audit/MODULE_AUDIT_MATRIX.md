@@ -112,3 +112,4 @@ Evaluasi mencakup kelengkapan Domain Entity, Use Cases CQRS, Validasi FluentVali
 2. **Sales & Procurement (P1):** Perhalus granularitas permission (`view` vs `create`) dan tambahkan approval limit matrix.
 3. **Finance & Inventory (P1):** Tambahkan indeks database pada tabel jurnal dan mutasi stok.
 4. **Reports (P2):** Hubungkan library ekspor file Excel & PDF pada seluruh tab laporan.
+

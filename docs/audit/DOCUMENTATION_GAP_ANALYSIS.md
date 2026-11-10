@@ -28,3 +28,4 @@ Agar dokumentasi di `/docs` tetap menjadi *Single Source of Truth* yang terperca
 2. **Pembaruan Diagram Arsitektur (`SOFTWARE_ARCHITECTURE.md`):** Perbarui diagram alur autentikasi Blazor Server setelah migrasi ke `AuthenticationStateProvider`.
 3. **Penyempurnaan Kamus Data (`DATA_DICTIONARY.md`):** Tambahkan catatan indeks komposit baru pada tabel `journal_lines` dan `stock_movements`.
 4. **Pemeliharaan Changelog (`CHANGELOG.md`):** Catat setiap rilis remediasi audit dengan penomoran versi semantik teratur (`v1.0.1-security`, `v1.1.0-features`).
+

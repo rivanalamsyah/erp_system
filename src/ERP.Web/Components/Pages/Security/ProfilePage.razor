@@ -1,0 +1,197 @@
+@page "/security/profile"
+@attribute [Authorize]
+@inject ICurrentUserService CurrentUser
+@inject UserManager<ApplicationUser> UserManager
+@inject IApplicationDbContext DbContext
+@inject ISnackbar Snackbar
+@using ERP.Infrastructure.Identity.Models
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+
+<PageTitle>Profil Saya — Enterprise ERP</PageTitle>
+
+<div class="mb-4">
+    <MudText Typo="Typo.h5" Style="font-weight: 700; color: #0F172A;">
+        Profil Pengguna
+    </MudText>
+    <MudText Typo="Typo.body2" Style="color: #64748B;">
+        Kelola informasi akun personal, kantor cabang penugasan, dan ringkasan hak akses Anda.
+    </MudText>
+</div>
+
+<MudGrid>
+    <MudItem xs="12" md="4">
+        <MudCard Elevation="1" Class="rounded-lg border border-slate-200 pa-4 text-center">
+            <MudAvatar Color="Color.Primary" Style="width: 80px; height: 80px; font-size: 2rem; margin: 0 auto;" Class="mb-3">
+                @(_user?.FullName?.Substring(0, Math.Min(2, _user.FullName.Length)).ToUpper() ?? "U")
+            </MudAvatar>
+            <MudText Typo="Typo.h6" Style="font-weight: 700;">@(_user?.FullName ?? "Pengguna")</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">@(_user?.Email ?? "-")</MudText>
+            
+            <div class="mt-3">
+                @foreach (var role in _roles)
+                {
+                    <MudChip T="string" Color="Color.Primary" Size="Size.Small" Class="mr-1 mb-1">
+                        @role
+                    </MudChip>
+                }
+            </div>
+
+            <MudDivider Class="my-4" />
+
+            <div class="text-left">
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-1">Status Akun</MudText>
+                <MudChip T="string" Color="Color.Success" Size="Size.Small" Icon="@Icons.Material.Filled.CheckCircle">
+                    Aktif & Terverifikasi
+                </MudChip>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-3 mb-1">Terdaftar Sejak</MudText>
+                <MudText Typo="Typo.body2" Style="font-weight: 600;">
+                    @(_user?.CreatedAtUtc.ToLocalTime().ToString("dd MMMM yyyy HH:mm") ?? "-")
+                </MudText>
+            </div>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12" md="8">
+        <MudCard Elevation="1" Class="rounded-lg border border-slate-200 pa-6">
+            <MudText Typo="Typo.h6" Style="font-weight: 600;" Class="mb-4">Informasi Akun</MudText>
+            
+            <MudStack Spacing="3">
+                <MudTextField Label="Alamat Email (Akun Login)" Value="@_user?.Email" ReadOnly="true"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Email" Margin="Margin.Dense" />
+                
+                <MudTextField Label="Nama Lengkap *" @bind-Value="_fullName"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Person" Margin="Margin.Dense" />
+
+                <MudTextField Label="Nomor Telepon" @bind-Value="_phoneNumber"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Phone" Margin="Margin.Dense" />
+
+                <div class="d-flex justify-end mt-4">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                               OnClick="UpdateProfileAsync" Disabled="@_saving">
+                        @if (_saving)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Simpan Perubahan
+                    </MudButton>
+                </div>
+            </MudStack>
+
+            <MudDivider Class="my-6" />
+
+            <MudText Typo="Typo.subtitle1" Style="font-weight: 600;" Class="mb-2">Cabang Penugasan Operasional</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                Daftar kantor cabang yang memiliki otorisasi transaksi pada akun Anda:
+            </MudText>
+
+            <MudTable Items="@_assignedBranches" Dense="true" Elevation="0" Bordered="true">
+                <HeaderContent>
+                    <MudTh>Kode Cabang</MudTh>
+                    <MudTh>Nama Cabang</MudTh>
+                    <MudTh>Perusahaan</MudTh>
+                    <MudTh>Tipe</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.Code</MudTd>
+                    <MudTd Style="font-weight: 600;">@context.Name</MudTd>
+                    <MudTd>@context.CompanyName</MudTd>
+                    <MudTd>
+                        @if (context.IsHeadOffice)
+                        {
+                            <MudChip T="string" Color="Color.Warning" Size="Size.Small">Head Office</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Color="Color.Default" Size="Size.Small">Cabang</MudChip>
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private ApplicationUser? _user;
+    private IList<string> _roles = [];
+    private string? _fullName;
+    private string? _phoneNumber;
+    private bool _saving = false;
+
+    private List<BranchDisplayModel> _assignedBranches = [];
+
+    private class BranchDisplayModel
+    {
+        public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string CompanyName { get; set; } = string.Empty;
+        public bool IsHeadOffice { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (CurrentUser.UserId.HasValue)
+        {
+            _user = await UserManager.FindByIdAsync(CurrentUser.UserId.Value.ToString());
+            if (_user != null)
+            {
+                _fullName = _user.FullName;
+                _phoneNumber = _user.PhoneNumber;
+                _roles = await UserManager.GetRolesAsync(_user);
+
+                var branches = await DbContext.Branches
+                    .Include(b => b.Company)
+                    .AsNoTracking()
+                    .Where(b => !b.IsDeleted)
+                    .ToListAsync();
+
+                _assignedBranches = branches.Select(b => new BranchDisplayModel
+                {
+                    Code = b.Code,
+                    Name = b.Name,
+                    CompanyName = b.Company.Name,
+                    IsHeadOffice = b.IsHeadOffice
+                }).ToList();
+            }
+        }
+    }
+
+    private async Task UpdateProfileAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_fullName))
+        {
+            Snackbar.Add("Nama lengkap wajib diisi.", Severity.Warning);
+            return;
+        }
+
+        if (_user == null) return;
+
+        _saving = true;
+        try
+        {
+            _user.FullName = _fullName.Trim();
+            _user.PhoneNumber = _phoneNumber?.Trim();
+            _user.UpdatedAtUtc = DateTime.UtcNow;
+
+            var result = await UserManager.UpdateAsync(_user);
+            if (result.Succeeded)
+            {
+                Snackbar.Add("Profil berhasil diperbarui.", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(string.Join(", ", result.Errors.Select(e => e.Description)), Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Gagal menyimpan profil: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}
+

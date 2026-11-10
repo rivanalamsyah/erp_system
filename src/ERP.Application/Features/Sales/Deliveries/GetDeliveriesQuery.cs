@@ -7,7 +7,7 @@ using ERP.Shared.Security;
 
 namespace ERP.Application.Features.Sales.Deliveries;
 
-[RequirePermission(Permissions.Sales.DeliveryDispatch)]
+[RequirePermission(Permissions.Sales.DeliveryView)]
 public record GetDeliveriesQuery(
     Guid? WarehouseId = null,
     string? SearchTerm = null,

@@ -1,10 +1,13 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using ERP.Application.Common.Interfaces;
+using ERP.Application.Common.Security;
 using ERP.Shared;
+using ERP.Shared.Security;
 
 namespace ERP.Application.Features.Master.Suppliers;
 
+[RequirePermission(Permissions.Master.SupplierView)]
 public record GetSuppliersQuery(
     Guid? CompanyId = null,
     string? SearchTerm = null,

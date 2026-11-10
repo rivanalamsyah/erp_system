@@ -89,3 +89,4 @@ Sistem menggunakan tema kustom enterprise `ErpTheme.EnterpriseTheme` yang didefi
 | **Feedback Snackbars (`ISnackbar`)** | Notifikasi sukses (hijau) dan error (merah) konsisten di seluruh use case CRUD. | Pertahankan pola snackbar saat ini; pastikan durasi tampil 4-5 detik. |
 | **Konfirmasi Aksi Destruktif** | Seluruh aksi pembatalan, penolakan, dan posting jurnal menggunakan dialog konfirmasi eksplisit. | Standarisasi tombol aksi: Gunakan warna `Color.Error` untuk aksi permanen. |
 | **Responsivitas Mobile (`MudDrawer`)** | Sidebar menggunakan `Variant="DrawerVariant.Responsive"` yang menutup otomatis pada layar HP/tablet. | Pada tabel lebar (seperti Jurnal Lines atau SO Lines), sediakan scrollbar horizontal yang ramah sentuhan. |
+

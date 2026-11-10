@@ -159,3 +159,4 @@ migrationBuilder.CreateIndex(
     column: "invoice_id");
 ```
 Migrasi ini tidak bersifat destruktif dan aman diaplikasikan langsung pada lingkungan staging maupun produksi.
+

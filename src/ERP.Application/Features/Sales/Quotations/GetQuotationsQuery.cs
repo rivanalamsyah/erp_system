@@ -7,7 +7,7 @@ using ERP.Shared.Security;
 
 namespace ERP.Application.Features.Sales.Quotations;
 
-[RequirePermission(Permissions.Sales.QuotationCreate)]
+[RequirePermission(Permissions.Sales.QuotationView)]
 public record GetQuotationsQuery(
     Guid? CustomerId = null,
     string? SearchTerm = null,

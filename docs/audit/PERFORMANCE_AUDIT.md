@@ -98,3 +98,4 @@ $$\text{Estimasi Kapasitas Transaksi} \approx \frac{100 \text{ koneksi db}}{\tex
 
 - **Beban Baca (Read Load):** Mampu melayani hingga **1.200 request/detik** pada spesifikasi server 8 vCPU, 16 GB RAM.
 - **Beban Tulis (Write Load):** Mampu memproses hingga **350 transaksi invoice/order per detik** dengan durasi transaksi rata-rata $< 45\text{ ms}$.
+

@@ -466,6 +466,8 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("InvoiceId");
+
                     b.HasIndex("PaymentId");
 
                     b.ToTable("payment_allocations", "finance");
@@ -1003,11 +1005,11 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("BranchId");
 
-                    b.HasIndex("CompanyId");
-
                     b.HasIndex("ProductId");
 
-                    b.HasIndex("WarehouseId");
+                    b.HasIndex("CompanyId", "MovementDateUtc");
+
+                    b.HasIndex("WarehouseId", "ProductId", "MovementDateUtc");
 
                     b.ToTable("stock_movements", "inventory");
                 });
@@ -1950,12 +1952,12 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("BranchId");
 
-                    b.HasIndex("CompanyId");
-
                     b.HasIndex("PoNumber")
                         .IsUnique();
 
-                    b.HasIndex("SupplierId");
+                    b.HasIndex("CompanyId", "Status");
+
+                    b.HasIndex("SupplierId", "OrderDate");
 
                     b.ToTable("purchase_orders", "procurement");
                 });
@@ -2584,14 +2586,14 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("BranchId");
 
-                    b.HasIndex("CompanyId");
-
-                    b.HasIndex("CustomerId");
-
                     b.HasIndex("OrderNumber")
                         .IsUnique();
 
                     b.HasIndex("QuotationId");
+
+                    b.HasIndex("CompanyId", "Status");
+
+                    b.HasIndex("CustomerId", "OrderDate");
 
                     b.ToTable("sales_orders", "sales");
                 });

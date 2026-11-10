@@ -303,6 +303,8 @@ public class ApplicationDbContext(
         {
             b.ToTable("stock_movements", "inventory");
             b.HasKey(x => x.Id);
+            b.HasIndex(x => new { x.WarehouseId, x.ProductId, x.MovementDateUtc });
+            b.HasIndex(x => new { x.CompanyId, x.MovementDateUtc });
             b.Property(x => x.Quantity).HasPrecision(14, 4);
             b.Property(x => x.UnitCost).HasPrecision(18, 4);
             b.Property(x => x.TotalCost).HasPrecision(18, 2);
@@ -389,6 +391,8 @@ public class ApplicationDbContext(
             b.ToTable("purchase_orders", "procurement");
             b.HasKey(x => x.Id);
             b.HasIndex(x => x.PoNumber).IsUnique();
+            b.HasIndex(x => new { x.CompanyId, x.Status });
+            b.HasIndex(x => new { x.SupplierId, x.OrderDate });
             b.Property(x => x.Status).HasConversion<string>();
             b.Property(x => x.SubtotalAmount).HasPrecision(18, 2);
             b.Property(x => x.TaxAmount).HasPrecision(18, 2);
@@ -487,6 +491,8 @@ public class ApplicationDbContext(
             b.ToTable("sales_orders", "sales");
             b.HasKey(x => x.Id);
             b.HasIndex(x => x.OrderNumber).IsUnique();
+            b.HasIndex(x => new { x.CompanyId, x.Status });
+            b.HasIndex(x => new { x.CustomerId, x.OrderDate });
             b.Property(x => x.Status).HasConversion<string>();
             b.Property(x => x.SubtotalAmount).HasPrecision(18, 2);
             b.Property(x => x.TaxAmount).HasPrecision(18, 2);
@@ -594,6 +600,7 @@ public class ApplicationDbContext(
         {
             b.ToTable("journal_lines", "finance");
             b.HasKey(x => x.Id);
+            b.HasIndex(x => x.AccountId);
             b.Property(x => x.Debit).HasPrecision(18, 2);
             b.Property(x => x.Credit).HasPrecision(18, 2);
             b.HasOne(x => x.JournalEntry).WithMany(j => j.Lines).HasForeignKey(x => x.JournalEntryId).OnDelete(DeleteBehavior.Cascade);
@@ -632,6 +639,7 @@ public class ApplicationDbContext(
         {
             b.ToTable("payment_allocations", "finance");
             b.HasKey(x => x.Id);
+            b.HasIndex(x => x.InvoiceId);
             b.Property(x => x.AllocatedAmount).HasPrecision(18, 2);
             b.HasOne(x => x.Payment).WithMany(p => p.Allocations).HasForeignKey(x => x.PaymentId).OnDelete(DeleteBehavior.Cascade);
         });

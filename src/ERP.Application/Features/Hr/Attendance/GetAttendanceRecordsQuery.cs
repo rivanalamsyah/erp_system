@@ -1,10 +1,13 @@
 using ERP.Application.Common.Interfaces;
+using ERP.Application.Common.Security;
 using ERP.Shared;
+using ERP.Shared.Security;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Application.Features.Hr.Attendance;
 
+[RequirePermission(Permissions.Hr.AttendanceView)]
 public record GetAttendanceRecordsQuery(DateOnly? Date = null, Guid? EmployeeId = null) : IRequest<Result<List<AttendanceRecordDto>>>;
 
 public class GetAttendanceRecordsQueryHandler : IRequestHandler<GetAttendanceRecordsQuery, Result<List<AttendanceRecordDto>>>

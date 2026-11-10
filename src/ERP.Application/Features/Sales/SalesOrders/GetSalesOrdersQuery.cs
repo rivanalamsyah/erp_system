@@ -7,7 +7,7 @@ using ERP.Shared.Security;
 
 namespace ERP.Application.Features.Sales.SalesOrders;
 
-[RequirePermission(Permissions.Sales.OrderCreate)]
+[RequirePermission(Permissions.Sales.OrderView)]
 public record GetSalesOrdersQuery(
     Guid? CustomerId = null,
     string? SearchTerm = null,

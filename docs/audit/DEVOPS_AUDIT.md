@@ -105,3 +105,4 @@ flowchart LR
 - **Kondisi Aktual:** Logging saat ini mengandalkan `ILogger` lokal dan tabel `audit.audit_logs`.
 - **Rekomendasi Produksi:**
   Tambahkan paket NuGet `OpenTelemetry.Extensions.Hosting` dan eksportir OTLP untuk meneruskan metrik performa, latensi kueri database Npgsql, dan trace SignalR ke platform observability enterprise (misal Grafana Tempo / Prometheus / Azure Application Insights).
+

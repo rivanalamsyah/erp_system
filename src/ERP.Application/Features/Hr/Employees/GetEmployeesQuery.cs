@@ -1,10 +1,13 @@
 using ERP.Application.Common.Interfaces;
+using ERP.Application.Common.Security;
 using ERP.Shared;
+using ERP.Shared.Security;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Application.Features.Hr.Employees;
 
+[RequirePermission(Permissions.Hr.EmployeeView)]
 public record GetEmployeesQuery(Guid? DepartmentId = null, string? SearchTerm = null) : IRequest<Result<List<EmployeeDto>>>;
 
 public class GetEmployeesQueryHandler : IRequestHandler<GetEmployeesQuery, Result<List<EmployeeDto>>>

@@ -1,11 +1,14 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using ERP.Application.Common.Interfaces;
+using ERP.Application.Common.Security;
 using ERP.Domain.Entities.Master;
 using ERP.Shared.Common;
+using ERP.Shared.Security;
 
 namespace ERP.Application.Features.Master.Products;
 
+[RequirePermission(Permissions.Master.ProductView)]
 public record GetProductsQuery(
     Guid? CompanyId = null,
     Guid? CategoryId = null,

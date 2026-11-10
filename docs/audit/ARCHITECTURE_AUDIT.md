@@ -138,3 +138,4 @@ b.Property(x => x.Version).IsRowVersion();
 ```
 Ketika dua pengguna mencoba mengonfirmasi transaksi yang sama secara bersamaan, EF Core melempar `DbUpdateConcurrencyException`.
 - **Rekomendasi UI:** Tangani `DbUpdateConcurrencyException` di Blazor Pages dengan menampilkan pesan ramah pengguna: *"Data telah diperbarui oleh pengguna lain. Halaman akan memuat ulang data terbaru."* alih-alih menampilkan error generik.
+

@@ -1,10 +1,13 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using ERP.Application.Common.Interfaces;
+using ERP.Application.Common.Security;
 using ERP.Shared.Common;
+using ERP.Shared.Security;
 
 namespace ERP.Application.Features.Master.Companies;
 
+[RequirePermission(Permissions.Master.CompanyView)]
 public record GetCompaniesQuery(
     string? SearchTerm = null,
     int PageNumber = 1,

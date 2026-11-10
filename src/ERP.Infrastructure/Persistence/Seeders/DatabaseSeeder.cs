@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using ERP.Domain.Entities.Inventory;
 using ERP.Domain.Entities.Master;
@@ -13,6 +14,7 @@ public class DatabaseSeeder(
     ApplicationDbContext context,
     UserManager<ApplicationUser> userManager,
     RoleManager<ApplicationRole> roleManager,
+    IConfiguration configuration,
     ILogger<DatabaseSeeder> logger)
 {
     public static readonly Guid DefaultCompanyId = Guid.Parse("11111111-1111-1111-1111-111111111111");
@@ -348,7 +350,8 @@ public class DatabaseSeeder(
 
     private async Task SeedAdminUserAsync()
     {
-        const string adminEmail = "admin@enterprise.erp";
+        var adminEmail = configuration["SUPERADMIN_EMAIL"] ?? "admin@enterprise.erp";
+        var adminPassword = configuration["SUPERADMIN_PASSWORD"] ?? "Admin@12345";
         var adminUser = await userManager.FindByEmailAsync(adminEmail);
 
         if (adminUser == null)
@@ -364,7 +367,7 @@ public class DatabaseSeeder(
                 CreatedAtUtc = DateTime.UtcNow
             };
 
-            var createResult = await userManager.CreateAsync(adminUser, "Admin@12345");
+            var createResult = await userManager.CreateAsync(adminUser, adminPassword);
             if (createResult.Succeeded)
             {
                 await userManager.AddToRoleAsync(adminUser, Roles.SuperAdmin);

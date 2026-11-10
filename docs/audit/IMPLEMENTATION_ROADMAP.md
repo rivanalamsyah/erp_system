@@ -68,3 +68,4 @@ Setiap merge kode ke branch utama wajib memicu eksekusi pengujian regresi:
 1. **Regresi Aturan Finansial:** Verifikasi invarian keseimbangan jurnal mutlak ($\sum \text{Debit} == \sum \text{Kredit}$) dan pencegahan mutasi periode tertutup.
 2. **Regresi Alokasi Persediaan:** Verifikasi saldo stok gudang tidak pernah menjadi negatif pada kondisi apapun.
 3. **Regresi Multi-Tenant:** Verifikasi kueri tidak membocorkan data antar perusahaan/cabang.
+

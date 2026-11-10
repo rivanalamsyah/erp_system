@@ -1,10 +1,13 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using ERP.Application.Common.Interfaces;
+using ERP.Application.Common.Security;
 using ERP.Shared;
+using ERP.Shared.Security;
 
 namespace ERP.Application.Features.Master.Customers;
 
+[RequirePermission(Permissions.Master.CustomerView)]
 public record GetCustomersQuery(
     Guid? CompanyId = null,
     string? SearchTerm = null,

@@ -7,7 +7,7 @@ using ERP.Shared.Security;
 
 namespace ERP.Application.Features.Sales.SalesInvoices;
 
-[RequirePermission(Permissions.Sales.InvoiceIssue)]
+[RequirePermission(Permissions.Sales.InvoiceView)]
 public record GetSalesInvoicesQuery(
     Guid? CustomerId = null,
     string? SearchTerm = null,
