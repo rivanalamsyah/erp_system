@@ -74,3 +74,4 @@ public class GetPurchaseOrdersQueryHandler(IApplicationDbContext context)
             new PagedResult<PurchaseOrderDto>(items, totalCount, request.PageNumber, request.PageSize));
     }
 }
+

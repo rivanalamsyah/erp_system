@@ -20,3 +20,4 @@ public record InventoryValuationDto(
     int TotalItemCount,
     List<StockValuationItemDto> Items
 );
+

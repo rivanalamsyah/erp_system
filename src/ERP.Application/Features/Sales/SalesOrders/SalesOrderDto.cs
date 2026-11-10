@@ -27,3 +27,4 @@ public record SalesOrderDto(
     decimal TotalAmount,
     DateTime CreatedAtUtc,
     IReadOnlyList<SalesOrderItemDto> Items);
+

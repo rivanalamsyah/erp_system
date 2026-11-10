@@ -152,3 +152,4 @@ public class SalesOrderItem
     public SalesOrder SalesOrder { get; set; } = default!;
     public Product Product { get; set; } = default!;
 }
+

@@ -31,3 +31,4 @@ public record PayrollPeriodDto(
     int EmployeeCount,
     List<PayrollItemDto> Items
 );
+

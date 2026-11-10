@@ -74,3 +74,4 @@ public class SalesTests
         so.Items.First().ShippedQuantity.Should().Be(20);
     }
 }
+

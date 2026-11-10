@@ -162,3 +162,4 @@ public class ConfirmSalesOrderCommandHandler(
         return Result.Success();
     }
 }
+

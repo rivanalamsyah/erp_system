@@ -103,3 +103,4 @@ public class PostSalesInvoiceCommandHandler(
         return Result.Success();
     }
 }
+

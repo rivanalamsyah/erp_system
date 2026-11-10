@@ -15,3 +15,4 @@ public record VendorBillDto(
     decimal RemainingAmount,
     string Status,
     DateTime CreatedAtUtc);
+

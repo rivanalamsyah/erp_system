@@ -91,3 +91,4 @@ public class Employee : BaseEntity<Guid>
         UpdatedAtUtc = DateTime.UtcNow;
     }
 }
+

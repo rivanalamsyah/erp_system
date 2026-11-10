@@ -84,14 +84,12 @@
                         <MudIconButton Icon="@Icons.Material.Filled.Visibility"
                                        Size="Size.Small"
                                        Color="Color.Info"
-                                       Title="Lihat Detail Item"
                                        OnClick="@(() => ShowDetails(context))" />
                         @if (context.Status == "Draft" || context.Status == "PendingApproval")
                         {
                             <MudIconButton Icon="@Icons.Material.Filled.CheckCircle"
                                            Size="Size.Small"
                                            Color="Color.Success"
-                                           Title="Setujui PR"
                                            OnClick="@(() => ApprovePr(context))" />
                         }
                     </MudTd>
@@ -180,8 +178,8 @@
                                 <MudSelectItem Value="@prod.Id">@prod.Name (@prod.Sku)</MudSelectItem>
                             }
                         </MudSelect>
-                        <MudNumericField T="decimal" Label="Qty" @bind-Value="line.Quantity" Min="0.01m" Dense="true" Style="width: 100px;" />
-                        <MudNumericField T="decimal" Label="Est. Harga" @bind-Value="line.EstimatedUnitPrice" Min="0m" Dense="true" Style="width: 150px;" />
+                        <MudNumericField T="decimal" Label="Qty" @bind-Value="line.Quantity" Min="0.01m" Margin="Margin.Dense" Style="width: 100px;" />
+                        <MudNumericField T="decimal" Label="Est. Harga" @bind-Value="line.EstimatedUnitPrice" Min="0m" Margin="Margin.Dense" Style="width: 150px;" />
                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
                                        OnClick="@(() => _formLines.Remove(line))" Disabled="@(_formLines.Count <= 1)" />
                     </div>

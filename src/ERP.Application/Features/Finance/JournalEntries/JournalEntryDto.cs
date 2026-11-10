@@ -22,3 +22,4 @@ public record JournalEntryDto(
     DateTime? PostedAtUtc,
     DateTime CreatedAtUtc,
     IReadOnlyList<JournalLineDto> Lines);
+

@@ -22,3 +22,4 @@ public record DeliveryDto(
     string Status,
     DateTime CreatedAtUtc,
     IReadOnlyList<DeliveryItemDto> Items);
+

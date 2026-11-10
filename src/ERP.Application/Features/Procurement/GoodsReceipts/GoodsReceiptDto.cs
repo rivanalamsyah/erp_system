@@ -22,3 +22,4 @@ public record GoodsReceiptDto(
     string Status,
     DateTime CreatedAtUtc,
     IReadOnlyList<GoodsReceiptItemDto> Items);
+

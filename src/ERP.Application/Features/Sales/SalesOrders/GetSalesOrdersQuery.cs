@@ -81,3 +81,4 @@ public class GetSalesOrdersQueryHandler(IApplicationDbContext context)
             new PagedResult<SalesOrderDto>(items, totalCount, request.PageNumber, request.PageSize));
     }
 }
+

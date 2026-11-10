@@ -33,3 +33,4 @@ public record ProcurementAnalyticsDto(
     int TotalPoCount,
     int TotalBillCount
 );
+

@@ -55,3 +55,4 @@ public class FiscalPeriod
         ClosedByUserId = null;
     }
 }
+

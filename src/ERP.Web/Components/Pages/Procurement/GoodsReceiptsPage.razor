@@ -80,14 +80,12 @@
                         <MudIconButton Icon="@Icons.Material.Filled.Visibility"
                                        Size="Size.Small"
                                        Color="Color.Info"
-                                       Title="Lihat Detail Barang"
                                        OnClick="@(() => ShowDetails(context))" />
                         @if (context.Status == "Draft")
                         {
                             <MudIconButton Icon="@Icons.Material.Filled.CheckCircle"
                                            Size="Size.Small"
                                            Color="Color.Success"
-                                           Title="Konfirmasi Masuk Gudang (Perpetual Inventory)"
                                            OnClick="@(() => ReceiveGrn(context))" />
                         }
                     </MudTd>
@@ -188,7 +186,7 @@
                             <MudTd>@context.ProductName (@context.ProductSku)</MudTd>
                             <MudTd Style="text-align: right;">@context.RemainingQuantity.ToString("N2")</MudTd>
                             <MudTd Style="text-align: right; width: 150px;">
-                                <MudNumericField T="decimal" @bind-Value="context.QuantityReceived" Min="0" Max="@context.RemainingQuantity" Dense="true" />
+                                <MudNumericField T="decimal" @bind-Value="context.QuantityReceived" Min="0" Max="@context.RemainingQuantity" Margin="Margin.Dense" />
                             </MudTd>
                         </RowTemplate>
                     </MudTable>
@@ -423,3 +421,4 @@
         }
     }
 }
+

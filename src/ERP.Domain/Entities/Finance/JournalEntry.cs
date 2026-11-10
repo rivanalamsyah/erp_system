@@ -143,3 +143,4 @@ public class JournalLine
     public JournalEntry JournalEntry { get; set; } = default!;
     public ChartOfAccount Account { get; set; } = default!;
 }
+

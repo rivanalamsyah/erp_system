@@ -24,3 +24,4 @@ public record LeaveRequestDto(
     LeaveRequestStatus Status,
     DateTime CreatedAtUtc
 );
+

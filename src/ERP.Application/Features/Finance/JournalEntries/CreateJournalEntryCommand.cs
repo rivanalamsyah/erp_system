@@ -143,3 +143,4 @@ public class PostJournalEntryCommandHandler(
         return Result.Success();
     }
 }
+

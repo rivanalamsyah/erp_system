@@ -25,3 +25,4 @@ public record PurchaseOrderDto(
     decimal TotalAmount,
     DateTime CreatedAtUtc,
     IReadOnlyList<PurchaseOrderItemDto> Items);
+

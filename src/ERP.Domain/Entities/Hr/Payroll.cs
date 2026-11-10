@@ -113,3 +113,4 @@ public class PayrollItem
     public PayrollPeriod Period { get; set; } = default!;
     public Employee Employee { get; set; } = default!;
 }
+

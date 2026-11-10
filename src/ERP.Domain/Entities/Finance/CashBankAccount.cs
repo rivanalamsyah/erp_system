@@ -63,3 +63,4 @@ public class CashBankAccount : BaseEntity<Guid>
         UpdatedAtUtc = DateTime.UtcNow;
     }
 }
+

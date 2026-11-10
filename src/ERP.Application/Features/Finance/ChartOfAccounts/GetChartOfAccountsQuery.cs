@@ -52,3 +52,4 @@ public class GetChartOfAccountsQueryHandler(IApplicationDbContext context)
         return Result<IReadOnlyList<ChartOfAccountDto>>.Success(accounts);
     }
 }
+

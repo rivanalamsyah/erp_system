@@ -110,3 +110,4 @@ public class DeliveryItem
     public SalesOrderItem SalesOrderItem { get; set; } = default!;
     public Product Product { get; set; } = default!;
 }
+

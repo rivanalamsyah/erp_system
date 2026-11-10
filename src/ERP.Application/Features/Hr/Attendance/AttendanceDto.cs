@@ -15,3 +15,4 @@ public record AttendanceRecordDto(
     int LateMinutes,
     string? Notes
 );
+

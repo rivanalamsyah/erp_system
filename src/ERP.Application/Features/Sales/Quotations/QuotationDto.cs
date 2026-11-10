@@ -24,3 +24,4 @@ public record QuotationDto(
     decimal TotalAmount,
     DateTime CreatedAtUtc,
     IReadOnlyList<QuotationItemDto> Items);
+

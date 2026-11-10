@@ -121,3 +121,4 @@ public class HrTests
         period.Items.First().IsPaid.Should().BeTrue();
     }
 }
+

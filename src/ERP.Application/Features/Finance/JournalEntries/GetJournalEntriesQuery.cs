@@ -68,3 +68,4 @@ public class GetJournalEntriesQueryHandler(IApplicationDbContext context)
             new PagedResult<JournalEntryDto>(items, totalCount, request.PageNumber, request.PageSize));
     }
 }
+

@@ -68,3 +68,4 @@ public class GetVendorBillsQueryHandler(IApplicationDbContext context)
         return new PagedResult<VendorBillDto>(items, totalCount, request.PageNumber, request.PageSize);
     }
 }
+

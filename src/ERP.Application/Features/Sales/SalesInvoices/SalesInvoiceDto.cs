@@ -17,3 +17,4 @@ public record SalesInvoiceDto(
     decimal RemainingAmount,
     string Status,
     DateTime CreatedAtUtc);
+

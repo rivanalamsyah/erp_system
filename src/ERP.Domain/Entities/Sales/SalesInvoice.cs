@@ -105,3 +105,4 @@ public class SalesInvoice : BaseEntity<Guid>
         UpdatedAtUtc = DateTime.UtcNow;
     }
 }
+

@@ -77,3 +77,4 @@ public class GetQuotationsQueryHandler(IApplicationDbContext context)
             new PagedResult<QuotationDto>(items, totalCount, request.PageNumber, request.PageSize));
     }
 }
+

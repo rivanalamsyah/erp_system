@@ -19,3 +19,4 @@ public record PaymentDto(
     string Status,
     DateTime CreatedAtUtc,
     IReadOnlyList<PaymentAllocationDto> Allocations);
+

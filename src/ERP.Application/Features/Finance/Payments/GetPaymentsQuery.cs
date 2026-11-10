@@ -88,3 +88,4 @@ public class GetPaymentsQueryHandler(IApplicationDbContext context)
             new PagedResult<PaymentDto>(items, totalCount, request.PageNumber, request.PageSize));
     }
 }
+

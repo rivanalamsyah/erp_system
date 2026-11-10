@@ -84,14 +84,12 @@
                         <MudIconButton Icon="@Icons.Material.Filled.Visibility"
                                        Size="Size.Small"
                                        Color="Color.Info"
-                                       Title="Lihat Detail Item"
                                        OnClick="@(() => ShowDetails(context))" />
                         @if (context.Status == "Draft" || context.Status == "PendingApproval")
                         {
                             <MudIconButton Icon="@Icons.Material.Filled.CheckCircle"
                                            Size="Size.Small"
                                            Color="Color.Success"
-                                           Title="Setujui PO"
                                            OnClick="@(() => ApprovePo(context))" />
                         }
                     </MudTd>
@@ -191,9 +189,9 @@
                                 <MudSelectItem Value="@prod.Id">@prod.Name (@prod.Sku)</MudSelectItem>
                             }
                         </MudSelect>
-                        <MudNumericField T="decimal" Label="Qty" @bind-Value="line.Quantity" Min="0.01m" Dense="true" Style="width: 80px;" />
-                        <MudNumericField T="decimal" Label="Harga Beli" @bind-Value="line.UnitPrice" Min="0m" Dense="true" Style="width: 140px;" />
-                        <MudNumericField T="decimal" Label="Disc %" @bind-Value="line.DiscountRate" Min="0m" Max="100m" Dense="true" Style="width: 80px;" />
+                        <MudNumericField T="decimal" Label="Qty" @bind-Value="line.Quantity" Min="0.01m" Margin="Margin.Dense" Style="width: 80px;" />
+                        <MudNumericField T="decimal" Label="Harga Beli" @bind-Value="line.UnitPrice" Min="0m" Margin="Margin.Dense" Style="width: 140px;" />
+                        <MudNumericField T="decimal" Label="Disc %" @bind-Value="line.DiscountRate" Min="0m" Max="100m" Margin="Margin.Dense" Style="width: 80px;" />
                         <MudText Typo="Typo.body2" Class="fw-semibold px-2" Style="min-width: 120px; text-align: right;">
                             Rp @((line.Quantity * line.UnitPrice * (1 - (line.DiscountRate / 100m))).ToString("N0"))
                         </MudText>

@@ -71,3 +71,4 @@ public class GetSalesInvoicesQueryHandler(IApplicationDbContext context)
             new PagedResult<SalesInvoiceDto>(items, totalCount, request.PageNumber, request.PageSize));
     }
 }
+

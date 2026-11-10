@@ -78,3 +78,4 @@ public class GetDeliveriesQueryHandler(IApplicationDbContext context)
             new PagedResult<DeliveryDto>(items, totalCount, request.PageNumber, request.PageSize));
     }
 }
+

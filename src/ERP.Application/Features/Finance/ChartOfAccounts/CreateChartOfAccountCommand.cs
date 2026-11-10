@@ -60,3 +60,4 @@ public class CreateChartOfAccountCommandHandler(
         return Result<Guid>.Success(coa.Id);
     }
 }
+

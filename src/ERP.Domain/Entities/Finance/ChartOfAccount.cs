@@ -77,3 +77,4 @@ public class ChartOfAccount : BaseEntity<Guid>
         UpdatedAtUtc = DateTime.UtcNow;
     }
 }
+

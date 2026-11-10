@@ -10,3 +10,4 @@ public record ChartOfAccountDto(
     bool IsHeader,
     bool IsActive,
     DateTime CreatedAtUtc);
+

@@ -8,3 +8,4 @@ public record FiscalPeriodDto(
     DateOnly EndDate,
     bool IsClosed,
     DateTime? ClosedAtUtc);
+

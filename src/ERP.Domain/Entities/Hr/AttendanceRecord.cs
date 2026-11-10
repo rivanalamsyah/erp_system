@@ -51,3 +51,4 @@ public class AttendanceRecord
         CheckOutTime = checkOutTime;
     }
 }
+

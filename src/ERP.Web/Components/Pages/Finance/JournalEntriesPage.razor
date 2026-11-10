@@ -129,7 +129,7 @@
                     <MudTd Style="text-align: right;">@(context.Credit > 0 ? $"Rp {context.Credit:N0}" : "-")</MudTd>
                 </RowTemplate>
                 <FooterContent>
-                    <MudTh ColSpan="3" Style="text-align: right; font-weight: bold;">TOTAL:</MudTh>
+                    <MudTh colspan="3" Style="text-align: right; font-weight: bold;">TOTAL:</MudTh>
                     <MudTh Style="text-align: right; font-weight: bold;">Rp @_selectedEntry.TotalDebit.ToString("N0")</MudTh>
                     <MudTh Style="text-align: right; font-weight: bold;">Rp @_selectedEntry.TotalCredit.ToString("N0")</MudTh>
                 </FooterContent>
@@ -414,3 +414,4 @@
         }
     }
 }
+

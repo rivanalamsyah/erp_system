@@ -123,3 +123,4 @@ public class QuotationItem
     public Quotation Quotation { get; set; } = default!;
     public Product Product { get; set; } = default!;
 }
+

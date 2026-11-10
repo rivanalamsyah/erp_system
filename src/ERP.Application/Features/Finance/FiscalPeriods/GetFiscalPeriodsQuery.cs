@@ -69,3 +69,4 @@ public class ToggleFiscalPeriodCommandHandler(
         return Result.Success();
     }
 }
+

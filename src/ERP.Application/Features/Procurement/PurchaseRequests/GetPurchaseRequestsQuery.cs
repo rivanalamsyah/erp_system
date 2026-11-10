@@ -60,3 +60,4 @@ public class GetPurchaseRequestsQueryHandler(IApplicationDbContext context)
             new PagedResult<PurchaseRequestDto>(items, totalCount, request.PageNumber, request.PageSize));
     }
 }
+

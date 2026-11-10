@@ -9,6 +9,9 @@ obj/
 ## Database & Local Data
 data/
 data/pgdata/
+backups/
+*.dump
+.env
 
 ## OS & IDE
 .vscode/

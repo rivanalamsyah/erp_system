@@ -210,9 +210,10 @@ server {
 
 ## 4. Strategi Backup & Pemulihan Bencana (Backup & Disaster Recovery)
 
-### 4.1 Script Backup Otomatis Harian (`backup.sh`)
-Dijalankan setiap hari pukul 02:00 WIB via Linux Cron:
+### 4.1 Script Backup Otomatis Harian (`backup.sh` & `backup_db.ps1`)
+Dijalankan setiap hari pukul 02:00 WIB via Linux Cron atau Windows Task Scheduler:
 
+#### Linux Bash (`backup.sh`):
 ```bash
 #!/bin/bash
 BACKUP_DIR="/var/backups/erp"
@@ -233,7 +234,15 @@ find $BACKUP_DIR -type f -name "*.sql.gz" -mtime +30 -delete
 echo "Backup basis data selesai: $FILENAME"
 ```
 
+#### Windows PowerShell (`scripts/backup_db.ps1`):
+```powershell
+# Jalankan backup database terkompresi dengan retensi otomatis 30 hari:
+& "scripts/backup_db.ps1" -Hostname "127.0.0.1" -Port 5432 -DatabaseName "enterprise_erp" -Username "erp_admin" -RetentionDays 30
+```
+
 ### 4.2 Prosedur Pemulihan (Restoration Drill - RTO < 2 Jam)
+
+#### Linux Bash:
 ```bash
 # 1. Hentikan aplikasi untuk mencegah mutasi data baru
 docker compose stop erp_app
@@ -243,6 +252,12 @@ gunzip -c /var/backups/erp/erp_db_YYYYMMDD_HHMMSS.sql.gz | docker exec -i erp_po
 
 # 3. Jalankan kembali aplikasi
 docker compose start erp_app
+```
+
+#### Windows PowerShell (`scripts/restore_db.ps1`):
+```powershell
+# Pulihkan database secara otomatis dari arsip terbaru (atau path tertentu):
+& "scripts/restore_db.ps1" -Hostname "127.0.0.1" -Port 5432 -DatabaseName "enterprise_erp" -Username "erp_admin"
 ```
 
 ---
