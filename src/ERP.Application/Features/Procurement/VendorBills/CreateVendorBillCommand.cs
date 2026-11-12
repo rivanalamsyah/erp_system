@@ -79,7 +79,8 @@ public record PostVendorBillCommand(Guid Id) : IRequest<Result>;
 
 public class PostVendorBillCommandHandler(
     IApplicationDbContext context,
-    ICurrentUserService currentUserService)
+    ICurrentUserService currentUserService,
+    IAccountingPostingService accountingPostingService)
     : IRequestHandler<PostVendorBillCommand, Result>
 {
     public async Task<Result> Handle(
@@ -93,8 +94,17 @@ public class PostVendorBillCommandHandler(
         if (bill == null)
             return Result.Failure(Error.NotFound("Bill.NotFound", "Data tagihan vendor tidak ditemukan."));
 
-        bill.Post(currentUserService.UserId ?? Guid.Empty);
+        var periodCheck = await accountingPostingService.EnsureFiscalPeriodOpenAsync(bill.CompanyId, bill.BillDate, cancellationToken);
+        if (periodCheck.IsFailure)
+            return periodCheck;
+
+        var userId = currentUserService.UserId ?? Guid.Empty;
+        bill.Post(userId);
         bill.PurchaseOrder.MarkAsBilled();
+
+        var glResult = await accountingPostingService.PostVendorBillJournalAsync(bill, userId, cancellationToken);
+        if (glResult.IsFailure)
+            return Result.Failure(glResult.Error);
 
         await context.SaveChangesAsync(cancellationToken);
 

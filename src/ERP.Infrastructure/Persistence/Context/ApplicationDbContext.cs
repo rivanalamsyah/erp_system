@@ -146,8 +146,17 @@ public class ApplicationDbContext(
             b.ToTable("companies", "master");
             b.HasKey(x => x.Id);
             b.HasIndex(x => x.Code).IsUnique();
+            b.Property(x => x.DefaultVatRate).HasPrecision(5, 2).HasDefaultValue(11.0m);
+            b.Property(x => x.FiscalStartMonth).HasDefaultValue(1);
+            b.Property(x => x.DefaultPaymentTermsDays).HasDefaultValue(30);
+            b.Property(x => x.DefaultCreditLimit).HasPrecision(18, 2).HasDefaultValue(50000000m);
+            b.Property(x => x.EnforceStrictCreditLimit).HasDefaultValue(true);
+            b.Property(x => x.AlertLowStock).HasDefaultValue(true);
+            b.Property(x => x.StockWarningThresholdPercentage).HasDefaultValue(20);
+            b.Property(x => x.AlertOverdueInvoices).HasDefaultValue(true);
+            b.Property(x => x.OverdueReminderDays).HasDefaultValue(7);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted);
+            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.IsSuperAdmin || x.Id == currentUserService.CompanyId));
         });
 
         builder.Entity<Branch>(b =>
@@ -160,7 +169,7 @@ public class ApplicationDbContext(
                 .HasForeignKey(x => x.CompanyId)
                 .OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<Department>(b =>
@@ -173,7 +182,7 @@ public class ApplicationDbContext(
                 .HasForeignKey(x => x.CompanyId)
                 .OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<UnitOfMeasure>(b =>
@@ -186,7 +195,7 @@ public class ApplicationDbContext(
                 .HasForeignKey(x => x.CompanyId)
                 .OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<ProductCategory>(b =>
@@ -203,7 +212,7 @@ public class ApplicationDbContext(
                 .HasForeignKey(x => x.ParentCategoryId)
                 .OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<Product>(b =>
@@ -228,7 +237,7 @@ public class ApplicationDbContext(
                 .HasForeignKey(x => x.UomId)
                 .OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<Customer>(b =>
@@ -242,7 +251,7 @@ public class ApplicationDbContext(
                 .HasForeignKey(x => x.CompanyId)
                 .OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<Supplier>(b =>
@@ -255,7 +264,7 @@ public class ApplicationDbContext(
                 .HasForeignKey(x => x.CompanyId)
                 .OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<DocumentSequence>(b =>
@@ -271,6 +280,8 @@ public class ApplicationDbContext(
                 .WithMany()
                 .HasForeignKey(x => x.BranchId)
                 .OnDelete(DeleteBehavior.Cascade);
+            b.Property(x => x.Version).IsRowVersion();
+            b.HasQueryFilter(x => x.CompanyId == currentUserService.CompanyId);
         });
 
         // 3. Pemetaan Schema Inventory
@@ -282,7 +293,7 @@ public class ApplicationDbContext(
             b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<StockBalance>(b =>
@@ -296,7 +307,8 @@ public class ApplicationDbContext(
             b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
-            b.HasQueryFilter(x => currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId);
+            b.Property(x => x.Version).IsRowVersion();
+            b.HasQueryFilter(x => x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<StockMovement>(b =>
@@ -313,7 +325,7 @@ public class ApplicationDbContext(
             b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
-            b.HasQueryFilter(x => currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId);
+            b.HasQueryFilter(x => x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<StockTransfer>(b =>
@@ -326,7 +338,7 @@ public class ApplicationDbContext(
             b.HasOne(x => x.SourceWarehouse).WithMany().HasForeignKey(x => x.SourceWarehouseId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.DestinationWarehouse).WithMany().HasForeignKey(x => x.DestinationWarehouseId).OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<StockTransferItem>(b =>
@@ -336,6 +348,7 @@ public class ApplicationDbContext(
             b.Property(x => x.Quantity).HasPrecision(14, 4);
             b.HasOne(x => x.Transfer).WithMany(t => t.Items).HasForeignKey(x => x.TransferId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+            b.HasQueryFilter(x => !x.Transfer.IsDeleted && x.Transfer.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<StockAdjustment>(b =>
@@ -348,7 +361,7 @@ public class ApplicationDbContext(
             b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<StockAdjustmentItem>(b =>
@@ -361,6 +374,7 @@ public class ApplicationDbContext(
             b.Property(x => x.UnitCost).HasPrecision(18, 4);
             b.HasOne(x => x.Adjustment).WithMany(a => a.Items).HasForeignKey(x => x.AdjustmentId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+            b.HasQueryFilter(x => !x.Adjustment.IsDeleted && x.Adjustment.CompanyId == currentUserService.CompanyId);
         });
 
         // 4. Pemetaan Schema Procurement
@@ -373,7 +387,7 @@ public class ApplicationDbContext(
             b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<PurchaseRequestItem>(b =>
@@ -384,6 +398,7 @@ public class ApplicationDbContext(
             b.Property(x => x.EstimatedUnitPrice).HasPrecision(18, 4);
             b.HasOne(x => x.Request).WithMany(r => r.Items).HasForeignKey(x => x.RequestId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+            b.HasQueryFilter(x => !x.Request.IsDeleted && x.Request.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<PurchaseOrder>(b =>
@@ -401,7 +416,7 @@ public class ApplicationDbContext(
             b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<PurchaseOrderItem>(b =>
@@ -415,6 +430,7 @@ public class ApplicationDbContext(
             b.Property(x => x.LineTotal).HasPrecision(18, 2);
             b.HasOne(x => x.PurchaseOrder).WithMany(p => p.Items).HasForeignKey(x => x.PurchaseOrderId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+            b.HasQueryFilter(x => !x.PurchaseOrder.IsDeleted && x.PurchaseOrder.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<GoodsReceipt>(b =>
@@ -428,7 +444,7 @@ public class ApplicationDbContext(
             b.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.PurchaseOrder).WithMany().HasForeignKey(x => x.PurchaseOrderId).OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<GoodsReceiptItem>(b =>
@@ -439,6 +455,7 @@ public class ApplicationDbContext(
             b.HasOne(x => x.GoodsReceipt).WithMany(g => g.Items).HasForeignKey(x => x.GoodsReceiptId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(x => x.PurchaseOrderItem).WithMany().HasForeignKey(x => x.PoItemId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+            b.HasQueryFilter(x => !x.GoodsReceipt.IsDeleted && x.GoodsReceipt.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<VendorBill>(b =>
@@ -446,6 +463,7 @@ public class ApplicationDbContext(
             b.ToTable("vendor_bills", "procurement");
             b.HasKey(x => x.Id);
             b.HasIndex(x => x.BillNumber).IsUnique();
+            b.HasIndex(x => new { x.CompanyId, x.Status, x.BillDate });
             b.Property(x => x.Status).HasConversion<string>();
             b.Property(x => x.TotalAmount).HasPrecision(18, 2);
             b.Property(x => x.PaidAmount).HasPrecision(18, 2);
@@ -454,7 +472,7 @@ public class ApplicationDbContext(
             b.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.PurchaseOrder).WithMany().HasForeignKey(x => x.PurchaseOrderId).OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         // 5. Pemetaan Schema Sales
@@ -471,7 +489,7 @@ public class ApplicationDbContext(
             b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<QuotationItem>(b =>
@@ -484,6 +502,7 @@ public class ApplicationDbContext(
             b.Property(x => x.LineTotal).HasPrecision(18, 2);
             b.HasOne(x => x.Quotation).WithMany(q => q.Items).HasForeignKey(x => x.QuotationId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+            b.HasQueryFilter(x => !x.Quotation.IsDeleted && x.Quotation.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<SalesOrder>(b =>
@@ -502,7 +521,7 @@ public class ApplicationDbContext(
             b.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.Quotation).WithMany().HasForeignKey(x => x.QuotationId).OnDelete(DeleteBehavior.SetNull);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<SalesOrderItem>(b =>
@@ -516,6 +535,7 @@ public class ApplicationDbContext(
             b.Property(x => x.LineTotal).HasPrecision(18, 2);
             b.HasOne(x => x.SalesOrder).WithMany(s => s.Items).HasForeignKey(x => x.SalesOrderId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+            b.HasQueryFilter(x => !x.SalesOrder.IsDeleted && x.SalesOrder.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<Delivery>(b =>
@@ -529,7 +549,7 @@ public class ApplicationDbContext(
             b.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.SalesOrder).WithMany().HasForeignKey(x => x.SalesOrderId).OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<DeliveryItem>(b =>
@@ -540,6 +560,7 @@ public class ApplicationDbContext(
             b.HasOne(x => x.Delivery).WithMany(d => d.Items).HasForeignKey(x => x.DeliveryId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(x => x.SalesOrderItem).WithMany().HasForeignKey(x => x.SoItemId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+            b.HasQueryFilter(x => !x.Delivery.IsDeleted && x.Delivery.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<SalesInvoice>(b =>
@@ -547,6 +568,7 @@ public class ApplicationDbContext(
             b.ToTable("sales_invoices", "sales");
             b.HasKey(x => x.Id);
             b.HasIndex(x => x.InvoiceNumber).IsUnique();
+            b.HasIndex(x => new { x.CompanyId, x.Status, x.InvoiceDate });
             b.Property(x => x.Status).HasConversion<string>();
             b.Property(x => x.SubtotalAmount).HasPrecision(18, 2);
             b.Property(x => x.TaxAmount).HasPrecision(18, 2);
@@ -557,7 +579,7 @@ public class ApplicationDbContext(
             b.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.SalesOrder).WithMany().HasForeignKey(x => x.SalesOrderId).OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         // 6. Pemetaan Schema Finance
@@ -571,7 +593,7 @@ public class ApplicationDbContext(
             b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.ParentAccount).WithMany(p => p.SubAccounts).HasForeignKey(x => x.ParentAccountId).OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<FiscalPeriod>(b =>
@@ -580,6 +602,7 @@ public class ApplicationDbContext(
             b.HasKey(x => x.Id);
             b.HasIndex(x => new { x.CompanyId, x.FiscalYear, x.PeriodNumber }).IsUnique();
             b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasQueryFilter(x => x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<JournalEntry>(b =>
@@ -587,13 +610,14 @@ public class ApplicationDbContext(
             b.ToTable("journal_entries", "finance");
             b.HasKey(x => x.Id);
             b.HasIndex(x => x.JournalNumber).IsUnique();
+            b.HasIndex(x => new { x.CompanyId, x.Status, x.JournalDate });
             b.Property(x => x.Status).HasConversion<string>();
             b.Property(x => x.TotalDebit).HasPrecision(18, 2);
             b.Property(x => x.TotalCredit).HasPrecision(18, 2);
             b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<JournalLine>(b =>
@@ -605,6 +629,7 @@ public class ApplicationDbContext(
             b.Property(x => x.Credit).HasPrecision(18, 2);
             b.HasOne(x => x.JournalEntry).WithMany(j => j.Lines).HasForeignKey(x => x.JournalEntryId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(x => x.Account).WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Restrict);
+            b.HasQueryFilter(x => !x.JournalEntry.IsDeleted && x.JournalEntry.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<CashBankAccount>(b =>
@@ -616,7 +641,7 @@ public class ApplicationDbContext(
             b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.Account).WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<Payment>(b =>
@@ -632,7 +657,7 @@ public class ApplicationDbContext(
             b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.CashBankAccount).WithMany().HasForeignKey(x => x.CashBankAccountId).OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<PaymentAllocation>(b =>
@@ -642,6 +667,7 @@ public class ApplicationDbContext(
             b.HasIndex(x => x.InvoiceId);
             b.Property(x => x.AllocatedAmount).HasPrecision(18, 2);
             b.HasOne(x => x.Payment).WithMany(p => p.Allocations).HasForeignKey(x => x.PaymentId).OnDelete(DeleteBehavior.Cascade);
+            b.HasQueryFilter(x => !x.Payment.IsDeleted && x.Payment.CompanyId == currentUserService.CompanyId);
         });
 
         // 7. Pemetaan Schema HR
@@ -656,7 +682,7 @@ public class ApplicationDbContext(
             b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.Department).WithMany().HasForeignKey(x => x.DepartmentId).OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<AttendanceRecord>(b =>
@@ -666,6 +692,7 @@ public class ApplicationDbContext(
             b.HasIndex(x => new { x.EmployeeId, x.AttendanceDate }).IsUnique();
             b.Property(x => x.Status).HasConversion<string>();
             b.HasOne(x => x.Employee).WithMany().HasForeignKey(x => x.EmployeeId).OnDelete(DeleteBehavior.Cascade);
+            b.HasQueryFilter(x => !x.Employee.IsDeleted && x.Employee.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<LeaveType>(b =>
@@ -674,7 +701,7 @@ public class ApplicationDbContext(
             b.HasKey(x => x.Id);
             b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<LeaveRequest>(b =>
@@ -684,6 +711,7 @@ public class ApplicationDbContext(
             b.Property(x => x.Status).HasConversion<string>();
             b.HasOne(x => x.Employee).WithMany().HasForeignKey(x => x.EmployeeId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(x => x.LeaveType).WithMany().HasForeignKey(x => x.LeaveTypeId).OnDelete(DeleteBehavior.Restrict);
+            b.HasQueryFilter(x => !x.Employee.IsDeleted && x.Employee.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<PayrollPeriod>(b =>
@@ -693,7 +721,7 @@ public class ApplicationDbContext(
             b.Property(x => x.Status).HasConversion<string>();
             b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
             b.Property(x => x.Version).IsRowVersion();
-            b.HasQueryFilter(x => !x.IsDeleted && (currentUserService.CompanyId == Guid.Empty || x.CompanyId == currentUserService.CompanyId));
+            b.HasQueryFilter(x => !x.IsDeleted && x.CompanyId == currentUserService.CompanyId);
         });
 
         builder.Entity<PayrollItem>(b =>
@@ -708,6 +736,7 @@ public class ApplicationDbContext(
             b.Property(x => x.NetSalary).HasPrecision(18, 2);
             b.HasOne(x => x.Period).WithMany(p => p.Items).HasForeignKey(x => x.PeriodId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(x => x.Employee).WithMany().HasForeignKey(x => x.EmployeeId).OnDelete(DeleteBehavior.Restrict);
+            b.HasQueryFilter(x => !x.Period.IsDeleted && x.Period.CompanyId == currentUserService.CompanyId);
         });
 
         // 8. Pemetaan Schema Audit
@@ -715,8 +744,11 @@ public class ApplicationDbContext(
         {
             b.ToTable("audit_logs", "audit");
             b.HasKey(x => x.Id);
+            b.HasIndex(x => new { x.CompanyId, x.CreatedAtUtc });
+            b.HasIndex(x => new { x.EntityName, x.Action });
             b.Property(x => x.OldValues).HasColumnType("jsonb");
             b.Property(x => x.NewValues).HasColumnType("jsonb");
+            b.HasQueryFilter(x => currentUserService.IsSuperAdmin || x.CompanyId == currentUserService.CompanyId);
         });
     }
 }

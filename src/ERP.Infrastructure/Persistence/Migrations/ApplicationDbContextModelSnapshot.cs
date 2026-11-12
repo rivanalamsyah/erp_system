@@ -59,6 +59,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CompanyId", "CreatedAtUtc");
+
+                    b.HasIndex("EntityName", "Action");
+
                     b.ToTable("audit_logs", "audit");
                 });
 
@@ -326,10 +330,10 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("BranchId");
 
-                    b.HasIndex("CompanyId");
-
                     b.HasIndex("JournalNumber")
                         .IsUnique();
+
+                    b.HasIndex("CompanyId", "Status", "JournalDate");
 
                     b.ToTable("journal_entries", "finance");
                 });
@@ -938,6 +942,12 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .HasPrecision(14, 4)
                         .HasColumnType("numeric(14,4)");
 
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.Property<Guid>("WarehouseId")
                         .HasColumnType("uuid");
 
@@ -1249,6 +1259,16 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<bool>("AlertLowStock")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("AlertOverdueInvoices")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<Guid>("BranchId")
                         .HasColumnType("uuid");
 
@@ -1269,6 +1289,23 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<decimal>("DefaultCreditLimit")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasDefaultValue(50000000m);
+
+                    b.Property<int>("DefaultPaymentTermsDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(30);
+
+                    b.Property<decimal>("DefaultVatRate")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasDefaultValue(11.0m);
+
                     b.Property<DateTime?>("DeletedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -1278,6 +1315,16 @@ namespace ERP.Infrastructure.Persistence.Migrations
                     b.Property<string>("Email")
                         .HasColumnType("text");
 
+                    b.Property<bool>("EnforceStrictCreditLimit")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<int>("FiscalStartMonth")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
@@ -1285,8 +1332,18 @@ namespace ERP.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("OverdueReminderDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(7);
+
                     b.Property<string>("Phone")
                         .HasColumnType("text");
+
+                    b.Property<int>("StockWarningThresholdPercentage")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(20);
 
                     b.Property<string>("TaxIdentificationNumber")
                         .IsRequired()
@@ -1469,6 +1526,12 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("Month")
                         .HasColumnType("integer");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<int>("Year")
                         .HasColumnType("integer");
@@ -2181,11 +2244,11 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("BranchId");
 
-                    b.HasIndex("CompanyId");
-
                     b.HasIndex("PurchaseOrderId");
 
                     b.HasIndex("SupplierId");
+
+                    b.HasIndex("CompanyId", "Status", "BillDate");
 
                     b.ToTable("vendor_bills", "procurement");
                 });
@@ -2496,14 +2559,14 @@ namespace ERP.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("BranchId");
 
-                    b.HasIndex("CompanyId");
-
                     b.HasIndex("CustomerId");
 
                     b.HasIndex("InvoiceNumber")
                         .IsUnique();
 
                     b.HasIndex("SalesOrderId");
+
+                    b.HasIndex("CompanyId", "Status", "InvoiceDate");
 
                     b.ToTable("sales_invoices", "sales");
                 });

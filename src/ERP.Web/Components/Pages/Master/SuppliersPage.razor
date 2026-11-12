@@ -1,4 +1,5 @@
 @page "/master/suppliers"
+@attribute [Authorize(Policy = Permissions.Master.SupplierView)]
 @inject ISender Sender
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService

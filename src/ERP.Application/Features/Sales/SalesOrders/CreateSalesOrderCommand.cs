@@ -59,13 +59,19 @@ public class CreateSalesOrderCommandHandler(
         if (customer == null)
             return Result<Guid>.Failure(Error.NotFound("Customer.NotFound", "Data pelanggan tidak ditemukan."));
 
+        var company = await context.Companies
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == request.CompanyId, cancellationToken);
+
+        var enforceCreditLimit = company?.EnforceStrictCreditLimit ?? true;
+
         // Calculate expected SO total
         var subtotal = request.Items.Sum(i => Math.Round(i.Quantity * i.UnitPrice * (1 - (i.DiscountRate / 100m)), 2));
         var tax = Math.Round(subtotal * 0.11m, 2);
         var expectedTotal = subtotal + tax;
 
         // BR-SALES-001: Credit Limit Enforcement
-        if (customer.CreditLimit > 0)
+        if (enforceCreditLimit && customer.CreditLimit > 0)
         {
             var outstandingDebt = await context.SalesInvoices
                 .Where(i => i.CustomerId == customer.Id && i.Status != SalesInvoiceStatus.Paid && i.Status != SalesInvoiceStatus.Cancelled)
@@ -138,11 +144,16 @@ public class ConfirmSalesOrderCommandHandler(
         if (so.Status != SalesOrderStatus.Draft)
             return Result.Failure(Error.Validation("SO.InvalidStatus", "Hanya Sales Order Draft yang dapat dikonfirmasi."));
 
+        // Batch load StockBalances in a single SQL query (eliminates N+1 inside loop)
+        var productIds = so.Items.Select(i => i.ProductId).Distinct().ToList();
+        var stockBalances = await context.StockBalances
+            .Where(b => b.WarehouseId == request.WarehouseId && productIds.Contains(b.ProductId))
+            .ToDictionaryAsync(b => b.ProductId, cancellationToken);
+
         // BR-SALES-002: No Overselling - Check Available Stock in Warehouse
         foreach (var item in so.Items)
         {
-            var stock = await context.StockBalances
-                .FirstOrDefaultAsync(b => b.WarehouseId == request.WarehouseId && b.ProductId == item.ProductId, cancellationToken);
+            stockBalances.TryGetValue(item.ProductId, out var stock);
 
             var availableStock = stock != null ? (stock.PhysicalQuantity - stock.ReservedQuantity) : 0;
             if (availableStock < item.Quantity)
@@ -162,4 +173,3 @@ public class ConfirmSalesOrderCommandHandler(
         return Result.Success();
     }
 }
-

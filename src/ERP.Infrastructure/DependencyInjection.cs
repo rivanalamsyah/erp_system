@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ERP.Application.Common.Interfaces;
+using ERP.Infrastructure.Identity;
 using ERP.Infrastructure.Identity.Models;
 using ERP.Infrastructure.Persistence.Context;
 using ERP.Infrastructure.Persistence.Interceptors;
@@ -19,6 +20,7 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException("Fatal: Database Connection String 'DefaultConnection' is not configured.");
 
         services.AddHttpContextAccessor();
+        services.AddMemoryCache();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
         services.AddScoped<AuditSaveChangesInterceptor>();
@@ -34,6 +36,7 @@ public static class DependencyInjection
 
         services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
         services.AddScoped<IDocumentSequenceService, DocumentSequenceService>();
+        services.AddScoped<IAccountingPostingService, AccountingPostingService>();
         services.AddScoped<DatabaseSeeder>();
 
         services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
@@ -49,7 +52,23 @@ public static class DependencyInjection
             options.User.RequireUniqueEmail = true;
         })
         .AddEntityFrameworkStores<ApplicationDbContext>()
+        .AddClaimsPrincipalFactory<ApplicationUserClaimsPrincipalFactory>()
         .AddDefaultTokenProviders();
+
+        services.Configure<SecurityStampValidatorOptions>(options =>
+        {
+            options.ValidationInterval = TimeSpan.FromMinutes(1);
+        });
+
+        services.ConfigureApplicationCookie(options =>
+        {
+            options.LoginPath = "/login";
+            options.AccessDeniedPath = "/login";
+            options.Cookie.HttpOnly = true;
+            options.Cookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax;
+            options.ExpireTimeSpan = TimeSpan.FromHours(8);
+            options.SlidingExpiration = true;
+        });
 
         return services;
     }

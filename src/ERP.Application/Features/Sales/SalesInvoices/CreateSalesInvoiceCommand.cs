@@ -81,7 +81,8 @@ public record PostSalesInvoiceCommand(Guid Id) : IRequest<Result>;
 
 public class PostSalesInvoiceCommandHandler(
     IApplicationDbContext context,
-    ICurrentUserService currentUserService)
+    ICurrentUserService currentUserService,
+    IAccountingPostingService accountingPostingService)
     : IRequestHandler<PostSalesInvoiceCommand, Result>
 {
     public async Task<Result> Handle(
@@ -95,12 +96,20 @@ public class PostSalesInvoiceCommandHandler(
         if (invoice == null)
             return Result.Failure(Error.NotFound("Invoice.NotFound", "Data faktur penjualan tidak ditemukan."));
 
-        invoice.Post(currentUserService.UserId ?? Guid.Empty);
+        var periodCheck = await accountingPostingService.EnsureFiscalPeriodOpenAsync(invoice.CompanyId, invoice.InvoiceDate, cancellationToken);
+        if (periodCheck.IsFailure)
+            return periodCheck;
+
+        var userId = currentUserService.UserId ?? Guid.Empty;
+        invoice.Post(userId);
         invoice.SalesOrder.MarkInvoiced();
+
+        var glResult = await accountingPostingService.PostSalesInvoiceJournalAsync(invoice, userId, cancellationToken);
+        if (glResult.IsFailure)
+            return Result.Failure(glResult.Error);
 
         await context.SaveChangesAsync(cancellationToken);
 
         return Result.Success();
     }
 }
-

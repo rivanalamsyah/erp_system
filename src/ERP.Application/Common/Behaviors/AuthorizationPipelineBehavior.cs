@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 using MediatR;
 using ERP.Application.Common.Interfaces;
@@ -10,54 +11,49 @@ public class AuthorizationPipelineBehavior<TRequest, TResponse>(ICurrentUserServ
     : IPipelineBehavior<TRequest, TResponse>
     where TRequest : notnull
 {
+    private static readonly ConcurrentDictionary<Type, RequirePermissionAttribute[]> PermissionCache = new();
+
     public async Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
     {
-        var permissionAttributes = request.GetType().GetCustomAttributes<RequirePermissionAttribute>().ToList();
+        var permissionAttributes = PermissionCache.GetOrAdd(
+            request.GetType(),
+            static type => type.GetCustomAttributes<RequirePermissionAttribute>(inherit: true).ToArray());
 
-        if (permissionAttributes.Count != 0)
+        if (!currentUserService.IsAuthenticated)
         {
-            if (!currentUserService.IsAuthenticated)
-            {
-                if (typeof(TResponse).IsGenericType && typeof(TResponse).GetGenericTypeDefinition() == typeof(Result<>))
-                {
-                    var failureMethod = typeof(TResponse).GetMethod("Failure", [typeof(Error)]);
-                    if (failureMethod != null)
-                    {
-                        return (TResponse)failureMethod.Invoke(null, [Error.Unauthorized("Auth.Unauthorized", "Pengguna belum terautentikasi.")])!;
-                    }
-                }
-                else if (typeof(TResponse) == typeof(Result))
-                {
-                    return (TResponse)(object)Result.Failure(Error.Unauthorized("Auth.Unauthorized", "Pengguna belum terautentikasi."));
-                }
+            return CreateFailureResponse(Error.Unauthorized("Auth.Unauthorized", "Pengguna belum terautentikasi."));
+        }
 
-                throw new UnauthorizedAccessException("Pengguna belum terautentikasi.");
-            }
-
+        if (permissionAttributes.Length != 0)
+        {
             foreach (var attr in permissionAttributes)
             {
                 if (!currentUserService.HasPermission(attr.PermissionCode))
                 {
                     var msg = $"Akses ditolak: Anda tidak memiliki izin '{attr.PermissionCode}'.";
-                    if (typeof(TResponse).IsGenericType && typeof(TResponse).GetGenericTypeDefinition() == typeof(Result<>))
-                    {
-                        var failureMethod = typeof(TResponse).GetMethod("Failure", [typeof(Error)]);
-                        if (failureMethod != null)
-                        {
-                            return (TResponse)failureMethod.Invoke(null, [Error.Forbidden("Auth.Forbidden", msg)])!;
-                        }
-                    }
-                    else if (typeof(TResponse) == typeof(Result))
-                    {
-                        return (TResponse)(object)Result.Failure(Error.Forbidden("Auth.Forbidden", msg));
-                    }
-
-                    throw new UnauthorizedAccessException(msg);
+                    return CreateFailureResponse(Error.Forbidden("Auth.Forbidden", msg));
                 }
             }
         }
 
         return await next();
     }
-}
 
+    private static TResponse CreateFailureResponse(Error error)
+    {
+        if (typeof(TResponse).IsGenericType && typeof(TResponse).GetGenericTypeDefinition() == typeof(Result<>))
+        {
+            var failureMethod = typeof(TResponse).GetMethod("Failure", [typeof(Error)]);
+            if (failureMethod != null)
+            {
+                return (TResponse)failureMethod.Invoke(null, [error])!;
+            }
+        }
+        else if (typeof(TResponse) == typeof(Result))
+        {
+            return (TResponse)(object)Result.Failure(error);
+        }
+
+        throw new UnauthorizedAccessException(error.Message);
+    }
+}

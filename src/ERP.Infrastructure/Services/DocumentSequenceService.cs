@@ -18,21 +18,33 @@ public class DocumentSequenceService(
         var now = dateTimeProvider.UtcNow;
         var docType = documentType.Trim().ToUpperInvariant();
 
-        // 1. Dapatkan kode cabang
-        var branch = await context.Branches
+        // 1. Dapatkan kode cabang tanpa melacak entitas tambahan
+        var branchCode = await context.Branches
             .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(b => b.Id == branchId, cancellationToken);
+            .AsNoTracking()
+            .Where(b => b.Id == branchId)
+            .Select(b => b.Code)
+            .FirstOrDefaultAsync(cancellationToken) ?? "HQ";
 
-        var branchCode = branch?.Code ?? "HQ";
+        // 2. Periksa Local ChangeTracker terlebih dahulu agar multi-dokumen dalam 1 transaksi konsisten
+        var sequence = context.DocumentSequences.Local.FirstOrDefault(s =>
+            s.CompanyId == companyId &&
+            s.BranchId == branchId &&
+            s.DocumentType == docType &&
+            s.Year == now.Year &&
+            s.Month == now.Month);
 
-        // 2. Cari atau buat entri sekuens dokumen bulanan
-        var sequence = await context.DocumentSequences
-            .FirstOrDefaultAsync(s =>
-                s.CompanyId == companyId &&
-                s.BranchId == branchId &&
-                s.DocumentType == docType &&
-                s.Year == now.Year &&
-                s.Month == now.Month, cancellationToken);
+        if (sequence == null)
+        {
+            sequence = await context.DocumentSequences
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(s =>
+                    s.CompanyId == companyId &&
+                    s.BranchId == branchId &&
+                    s.DocumentType == docType &&
+                    s.Year == now.Year &&
+                    s.Month == now.Month, cancellationToken);
+        }
 
         if (sequence == null)
         {
@@ -40,11 +52,10 @@ public class DocumentSequenceService(
             context.DocumentSequences.Add(sequence);
         }
 
+        // 3. Increment tanpa memanggil SaveChangesAsync prematur; akan di-commit atomik bersama dokumen utama
         var nextSeq = sequence.Increment();
-        await context.SaveChangesAsync(cancellationToken);
 
         // Format standar enterprise: DOC/BRANCH/YYYYMM/00001
         return $"{docType}/{branchCode}/{now.Year:D4}{now.Month:D2}/{nextSeq:D5}";
     }
 }
-

@@ -1,6 +1,8 @@
 @page "/security/roles"
+@attribute [Authorize(Policy = Permissions.Security.RolesManage)]
 @inject RoleManager<ApplicationRole> RoleManager
 @inject ApplicationDbContext DbContext
+@inject ICurrentUserService CurrentUserService
 @inject ISnackbar Snackbar
 @using ERP.Infrastructure.Identity.Models
 @using ERP.Infrastructure.Persistence.Context
@@ -121,11 +123,12 @@
 
     private async Task LoadRolesAndPermissionsAsync()
     {
-        var rawRoles = await RoleManager.Roles.OrderBy(r => r.Name).ToListAsync();
-        var allPerms = await DbContext.Permissions.OrderBy(p => p.Module).ThenBy(p => p.Code).ToListAsync();
+        var rawRoles = await RoleManager.Roles.AsNoTracking().OrderBy(r => r.Name).ToListAsync();
+        var allPerms = await DbContext.Permissions.AsNoTracking().OrderBy(p => p.Module).ThenBy(p => p.Code).ToListAsync();
         _permissionsByModule = allPerms.GroupBy(p => p.Module).ToDictionary(g => g.Key, g => g.ToList());
 
         var roleCounts = await DbContext.RolePermissions
+            .AsNoTracking()
             .GroupBy(rp => rp.RoleId)
             .Select(g => new { RoleId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.RoleId, x => x.Count);
@@ -159,6 +162,7 @@
     private async Task LoadGrantedPermissionsForCurrentRoleAsync()
     {
         var grantedIds = await DbContext.RolePermissions
+            .AsNoTracking()
             .Where(rp => rp.RoleId == _selectedRoleId)
             .Select(rp => rp.PermissionId)
             .ToListAsync();
@@ -191,9 +195,53 @@
             });
 
             DbContext.RolePermissions.AddRange(newAssignments);
+
+            // Perbarui ConcurrencyStamp role & SecurityStamp pengguna terkait agar klaim diregenerasi otomatis
+            var roleEntity = await DbContext.Roles.FirstOrDefaultAsync(r => r.Id == _selectedRoleId);
+            if (roleEntity != null)
+            {
+                roleEntity.ConcurrencyStamp = Guid.NewGuid().ToString();
+            }
+
+            var affectedUserIds = await DbContext.UserRoles
+                .Where(ur => ur.RoleId == _selectedRoleId)
+                .Select(ur => ur.UserId)
+                .ToListAsync();
+
+            if (affectedUserIds.Count > 0)
+            {
+                var affectedUsers = await DbContext.Users
+                    .Where(u => affectedUserIds.Contains(u.Id))
+                    .ToListAsync();
+
+                foreach (var u in affectedUsers)
+                {
+                    u.SecurityStamp = Guid.NewGuid().ToString();
+                }
+            }
+
             await DbContext.SaveChangesAsync();
 
-            Snackbar.Add($"Matriks izin untuk peran '{_selectedRoleName}' berhasil disimpan.", Severity.Success);
+            // Jika pengguna saat ini memiliki role yang diubah, sinkronkan izin pada sirkuit aktif secara instan
+            if (CurrentUserService.UserId.HasValue && affectedUserIds.Contains(CurrentUserService.UserId.Value))
+            {
+                var currentUserRoleIds = await DbContext.UserRoles
+                    .AsNoTracking()
+                    .Where(ur => ur.UserId == CurrentUserService.UserId.Value)
+                    .Select(ur => ur.RoleId)
+                    .ToListAsync();
+
+                var refreshedPermissionCodes = await DbContext.RolePermissions
+                    .AsNoTracking()
+                    .Where(rp => currentUserRoleIds.Contains(rp.RoleId))
+                    .Select(rp => rp.Permission.Code)
+                    .Distinct()
+                    .ToListAsync();
+
+                CurrentUserService.OverridePermissions(refreshedPermissionCodes);
+            }
+
+            Snackbar.Add($"Matriks izin untuk peran '{_selectedRoleName}' berhasil disimpan dan disinkronkan.", Severity.Success);
             await LoadRolesAndPermissionsAsync();
         }
         finally
@@ -204,4 +252,3 @@
 
     private record RoleItemModel(Guid Id, string Name, string Description, int PermissionCount);
 }
-

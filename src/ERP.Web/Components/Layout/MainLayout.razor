@@ -1,5 +1,7 @@
 @inherits LayoutComponentBase
+@implements IDisposable
 @inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
 @inject ICurrentUserService CurrentUserService
 @inject IApplicationDbContext DbContext
 @inject ISnackbar Snackbar
@@ -113,6 +115,7 @@
                 </MudMenuItem>
                 <MudDivider />
                 <form action="/api/auth/logout" method="post">
+                    <AntiforgeryToken />
                     <button type="submit" style="background: none; border: none; width: 100%; text-align: left; padding: 0;">
                         <MudMenuItem Icon="@Icons.Material.Outlined.Logout" IconColor="Color.Error">
                             Keluar (Logout)
@@ -128,14 +131,45 @@
         <NavMenu />
     </MudDrawer>
 
-    <!-- Main Workspace Content -->
+    <!-- Main Workspace Content Protected by ErrorBoundary -->
     <MudMainContent Class="pa-4 pa-md-6" Style="background-color: #F8FAFC; min-height: 100vh;">
-        @Body
+        <ErrorBoundary @ref="_errorBoundary">
+            <ChildContent>
+                @Body
+            </ChildContent>
+            <ErrorContent Context="ex">
+                <MudCard Elevation="2" Class="pa-6 my-6 border border-red-200 rounded-lg" Style="max-width: 680px; margin: 0 auto;">
+                    <div class="d-flex align-center mb-3">
+                        <MudIcon Icon="@Icons.Material.Filled.ReportProblem" Color="Color.Error" Size="Size.Large" Class="mr-3" />
+                        <div>
+                            <MudText Typo="Typo.h6" Style="font-weight: 700; color: #991B1B;">
+                                Terjadi Kendala Pemrosesan Komponen
+                            </MudText>
+                            <MudText Typo="Typo.caption" Style="color: #64748B;">
+                                Sesi sirkuit Anda tetap aman. Silakan muat ulang tampilan komponen di bawah ini.
+                            </MudText>
+                        </div>
+                    </div>
+                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-4">
+                        @ex.Message
+                    </MudAlert>
+                    <div class="d-flex gap-3">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="RecoverErrorBoundary">
+                            Pulihkan Tampilan
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Default" Href="/">
+                            Kembali ke Dashboard
+                        </MudButton>
+                    </div>
+                </MudCard>
+            </ErrorContent>
+        </ErrorBoundary>
     </MudMainContent>
 </MudLayout>
 
 @code {
     private bool _drawerOpen = true;
+    private ErrorBoundary? _errorBoundary;
 
     private string _activeBranchName = "HO-JKT • Head Office Jakarta";
     private Guid _activeBranchId = Guid.Empty;
@@ -150,23 +184,42 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _availableBranches = await DbContext.Branches
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        CurrentUserService.SetCurrentUserContext(authState.User);
+        CurrentUserService.OnContextChanged += HandleContextChanged;
+
+        var allowedBranchIds = CurrentUserService.AllowedBranchIds;
+
+        var branchQuery = DbContext.Branches
             .AsNoTracking()
-            .Where(b => !b.IsDeleted)
+            .Where(b => !b.IsDeleted);
+
+        if (!CurrentUserService.IsHeadOffice && !CurrentUserService.IsSuperAdmin && allowedBranchIds.Count > 0)
+        {
+            branchQuery = branchQuery.Where(b => allowedBranchIds.Contains(b.Id));
+        }
+
+        _availableBranches = await branchQuery
             .OrderBy(b => b.Code)
             .ToListAsync();
 
         if (_availableBranches.Count > 0)
         {
-            var defaultBranch = _availableBranches.FirstOrDefault(b => b.IsHeadOffice) ?? _availableBranches[0];
-            _activeBranchId = defaultBranch.Id;
-            _activeBranchName = $"{defaultBranch.Code} • {defaultBranch.Name}";
+            var currentBranchId = CurrentUserService.BranchId;
+            var activeBranch = _availableBranches.FirstOrDefault(b => b.Id == currentBranchId)
+                ?? _availableBranches.FirstOrDefault(b => b.IsHeadOffice)
+                ?? _availableBranches[0];
+
+            _activeBranchId = activeBranch.Id;
+            _activeBranchName = $"{activeBranch.Code} • {activeBranch.Name}";
+            CurrentUserService.SetActiveBranch(activeBranch.Id, activeBranch.CompanyId, activeBranch.IsHeadOffice);
         }
 
         if (CurrentUserService.IsAuthenticated)
         {
             _displayUserName = CurrentUserService.FullName ?? CurrentUserService.UserName ?? "admin@enterprise.erp";
-            _displayRole = CurrentUserService.HasPermission("security.users.manage") ? "SUPER ADMIN" : "STAFF";
+            _displayRole = CurrentUserService.Roles.FirstOrDefault()
+                ?? (CurrentUserService.HasPermission("security.users.manage") ? "SUPER ADMIN" : "STAFF");
 
             if (!string.IsNullOrWhiteSpace(_displayUserName))
             {
@@ -177,13 +230,22 @@
             }
         }
 
-        // Initialize dynamic notifications
         _unreadNotifications =
         [
             new("Purchase Request Baru", "PR/202611/0001 membutuhkan persetujuan manajer", "/procurement/requests", Icons.Material.Filled.Assignment, Color.Info),
             new("Sales Order Menunggu Rilis", "SO/202611/0001 telah diverifikasi limit kredit", "/sales/orders", Icons.Material.Filled.ShoppingCartCheckout, Color.Success),
             new("Pemberitahuan Pajak", "Tarif PPN Standar aktif 11% (UU HPP)", "/settings", Icons.Material.Filled.Receipt, Color.Warning)
         ];
+    }
+
+    protected override void OnParametersSet()
+    {
+        _errorBoundary?.Recover();
+    }
+
+    private void RecoverErrorBoundary()
+    {
+        _errorBoundary?.Recover();
     }
 
     private void ToggleDrawer()
@@ -193,8 +255,27 @@
 
     private void SwitchBranch(Branch branch)
     {
-        _activeBranchId = branch.Id;
-        _activeBranchName = $"{branch.Code} • {branch.Name}";
-        Snackbar.Add($"Cabang operasional beralih ke: {branch.Name}", Severity.Info);
+        try
+        {
+            CurrentUserService.SetActiveBranch(branch.Id, branch.CompanyId, branch.IsHeadOffice);
+            _activeBranchId = branch.Id;
+            _activeBranchName = $"{branch.Code} • {branch.Name}";
+            Snackbar.Add($"Cabang operasional aktif beralih ke: {branch.Code} • {branch.Name}", Severity.Info);
+            StateHasChanged();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void HandleContextChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        CurrentUserService.OnContextChanged -= HandleContextChanged;
     }
 }

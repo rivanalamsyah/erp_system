@@ -1,49 +1,69 @@
 using ERP.Application.Common.Interfaces;
+using ERP.Application.Common.Security;
 using ERP.Domain.Entities.Finance;
 using ERP.Shared;
+using ERP.Shared.Security;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Application.Features.Reports;
 
+[RequirePermission(Permissions.Reports.FinancialView)]
 public record GetBalanceSheetQuery(Guid CompanyId, DateOnly AsOfDate) : IRequest<Result<BalanceSheetDto>>;
+
+[RequirePermission(Permissions.Reports.FinancialView)]
 public record GetProfitAndLossQuery(Guid CompanyId, DateOnly StartDate, DateOnly EndDate) : IRequest<Result<ProfitAndLossDto>>;
+
+[RequirePermission(Permissions.Reports.FinancialView)]
 public record GetTrialBalanceQuery(Guid CompanyId, DateOnly AsOfDate) : IRequest<Result<TrialBalanceDto>>;
 
-public class FinancialReportsQueryHandler :
+public class FinancialReportsQueryHandler(IApplicationDbContext context, ICurrentUserService currentUserService) :
     IRequestHandler<GetBalanceSheetQuery, Result<BalanceSheetDto>>,
     IRequestHandler<GetProfitAndLossQuery, Result<ProfitAndLossDto>>,
     IRequestHandler<GetTrialBalanceQuery, Result<TrialBalanceDto>>
 {
-    private readonly IApplicationDbContext _context;
-
-    public FinancialReportsQueryHandler(IApplicationDbContext context)
-    {
-        _context = context;
-    }
-
     public async Task<Result<BalanceSheetDto>> Handle(GetBalanceSheetQuery request, CancellationToken cancellationToken)
     {
-        var accounts = await _context.ChartOfAccounts
-            .Where(a => a.CompanyId == request.CompanyId && a.IsActive)
+        var companyId = request.CompanyId != Guid.Empty ? request.CompanyId : currentUserService.CompanyId;
+
+        var accounts = await context.ChartOfAccounts
+            .AsNoTracking()
+            .Where(a => a.CompanyId == companyId && a.IsActive && !a.IsHeader)
             .OrderBy(a => a.AccountCode)
             .ToListAsync(cancellationToken);
 
-        var postedLines = await _context.JournalLines
-            .Include(l => l.JournalEntry)
-            .Where(l => l.JournalEntry.CompanyId == request.CompanyId &&
+        var accountTotals = await context.JournalLines
+            .AsNoTracking()
+            .Where(l => l.JournalEntry.CompanyId == companyId &&
                         l.JournalEntry.Status == JournalStatus.Posted &&
                         l.JournalEntry.JournalDate <= request.AsOfDate)
-            .ToListAsync(cancellationToken);
+            .GroupBy(l => l.AccountId)
+            .Select(g => new
+            {
+                AccountId = g.Key,
+                TotalDebit = g.Sum(x => x.Debit),
+                TotalCredit = g.Sum(x => x.Credit)
+            })
+            .ToDictionaryAsync(x => x.AccountId, cancellationToken);
 
-        var balances = new List<AccountBalanceDto>();
+        var balances = new List<AccountBalanceDto>(accounts.Count);
+        decimal totalRevenue = 0m;
+        decimal totalExpense = 0m;
+
         foreach (var acc in accounts)
         {
-            var lines = postedLines.Where(l => l.AccountId == acc.Id).ToList();
-            var totalDr = lines.Sum(l => l.Debit);
-            var totalCr = lines.Sum(l => l.Credit);
-
+            var totalDr = accountTotals.TryGetValue(acc.Id, out var agg) ? agg.TotalDebit : 0m;
+            var totalCr = agg != null ? agg.TotalCredit : 0m;
             var net = acc.NormalBalance == NormalBalance.DR ? (totalDr - totalCr) : (totalCr - totalDr);
+
+            if (acc.AccountType == AccountType.Revenue)
+            {
+                totalRevenue += (totalCr - totalDr);
+            }
+            else if (acc.AccountType == AccountType.Expense)
+            {
+                totalExpense += (totalDr - totalCr);
+            }
 
             balances.Add(new AccountBalanceDto(
                 acc.Id,
@@ -60,11 +80,7 @@ public class FinancialReportsQueryHandler :
         var liabilities = balances.Where(b => b.AccountType == AccountType.Liability).ToList();
         var equity = balances.Where(b => b.AccountType == AccountType.Equity).ToList();
 
-        // Calculate current earnings (Revenues - Expenses)
-        var revLines = postedLines.Where(l => accounts.Any(a => a.Id == l.AccountId && a.AccountType == AccountType.Revenue)).ToList();
-        var expLines = postedLines.Where(l => accounts.Any(a => a.Id == l.AccountId && a.AccountType == AccountType.Expense)).ToList();
-        var currentEarnings = revLines.Sum(l => l.Credit - l.Debit) - expLines.Sum(l => l.Debit - l.Credit);
-
+        var currentEarnings = totalRevenue - totalExpense;
         var totalAssets = assets.Sum(a => a.NetBalance);
         var totalLiabilities = liabilities.Sum(l => l.NetBalance);
         var totalEquity = equity.Sum(e => e.NetBalance) + currentEarnings;
@@ -86,25 +102,35 @@ public class FinancialReportsQueryHandler :
 
     public async Task<Result<ProfitAndLossDto>> Handle(GetProfitAndLossQuery request, CancellationToken cancellationToken)
     {
-        var accounts = await _context.ChartOfAccounts
-            .Where(a => a.CompanyId == request.CompanyId && a.IsActive)
+        var companyId = request.CompanyId != Guid.Empty ? request.CompanyId : currentUserService.CompanyId;
+
+        var accounts = await context.ChartOfAccounts
+            .AsNoTracking()
+            .Where(a => a.CompanyId == companyId && a.IsActive && !a.IsHeader &&
+                        (a.AccountType == AccountType.Revenue || a.AccountType == AccountType.Expense))
             .OrderBy(a => a.AccountCode)
             .ToListAsync(cancellationToken);
 
-        var postedLines = await _context.JournalLines
-            .Include(l => l.JournalEntry)
-            .Where(l => l.JournalEntry.CompanyId == request.CompanyId &&
+        var accountTotals = await context.JournalLines
+            .AsNoTracking()
+            .Where(l => l.JournalEntry.CompanyId == companyId &&
                         l.JournalEntry.Status == JournalStatus.Posted &&
                         l.JournalEntry.JournalDate >= request.StartDate &&
                         l.JournalEntry.JournalDate <= request.EndDate)
-            .ToListAsync(cancellationToken);
+            .GroupBy(l => l.AccountId)
+            .Select(g => new
+            {
+                AccountId = g.Key,
+                TotalDebit = g.Sum(x => x.Debit),
+                TotalCredit = g.Sum(x => x.Credit)
+            })
+            .ToDictionaryAsync(x => x.AccountId, cancellationToken);
 
-        var balances = new List<AccountBalanceDto>();
+        var balances = new List<AccountBalanceDto>(accounts.Count);
         foreach (var acc in accounts)
         {
-            var lines = postedLines.Where(l => l.AccountId == acc.Id).ToList();
-            var totalDr = lines.Sum(l => l.Debit);
-            var totalCr = lines.Sum(l => l.Credit);
+            var totalDr = accountTotals.TryGetValue(acc.Id, out var agg) ? agg.TotalDebit : 0m;
+            var totalCr = agg != null ? agg.TotalCredit : 0m;
             var net = acc.NormalBalance == NormalBalance.CR ? (totalCr - totalDr) : (totalDr - totalCr);
 
             balances.Add(new AccountBalanceDto(
@@ -119,8 +145,12 @@ public class FinancialReportsQueryHandler :
         }
 
         var revenues = balances.Where(b => b.AccountType == AccountType.Revenue).ToList();
-        var cogs = balances.Where(b => b.AccountType == AccountType.Expense && (b.AccountCode.StartsWith("5") || b.AccountName.ToLower().Contains("hpp") || b.AccountName.ToLower().Contains("pokok"))).ToList();
-        var expenses = balances.Where(b => b.AccountType == AccountType.Expense && !cogs.Any(c => c.AccountId == b.AccountId)).ToList();
+        var cogs = balances.Where(b => b.AccountType == AccountType.Expense &&
+            (b.AccountCode.StartsWith('5') ||
+             b.AccountName.Contains("hpp", StringComparison.OrdinalIgnoreCase) ||
+             b.AccountName.Contains("pokok", StringComparison.OrdinalIgnoreCase))).ToList();
+        var cogsIds = cogs.Select(c => c.AccountId).ToHashSet();
+        var expenses = balances.Where(b => b.AccountType == AccountType.Expense && !cogsIds.Contains(b.AccountId)).ToList();
 
         var totalRevenue = revenues.Sum(r => r.NetBalance);
         var totalCogs = cogs.Sum(c => c.NetBalance);
@@ -144,27 +174,36 @@ public class FinancialReportsQueryHandler :
 
     public async Task<Result<TrialBalanceDto>> Handle(GetTrialBalanceQuery request, CancellationToken cancellationToken)
     {
-        var accounts = await _context.ChartOfAccounts
-            .Where(a => a.CompanyId == request.CompanyId && a.IsActive)
+        var companyId = request.CompanyId != Guid.Empty ? request.CompanyId : currentUserService.CompanyId;
+
+        var accounts = await context.ChartOfAccounts
+            .AsNoTracking()
+            .Where(a => a.CompanyId == companyId && a.IsActive && !a.IsHeader)
             .OrderBy(a => a.AccountCode)
             .ToListAsync(cancellationToken);
 
-        var postedLines = await _context.JournalLines
-            .Include(l => l.JournalEntry)
-            .Where(l => l.JournalEntry.CompanyId == request.CompanyId &&
+        var accountTotals = await context.JournalLines
+            .AsNoTracking()
+            .Where(l => l.JournalEntry.CompanyId == companyId &&
                         l.JournalEntry.Status == JournalStatus.Posted &&
                         l.JournalEntry.JournalDate <= request.AsOfDate)
-            .ToListAsync(cancellationToken);
+            .GroupBy(l => l.AccountId)
+            .Select(g => new
+            {
+                AccountId = g.Key,
+                TotalDebit = g.Sum(x => x.Debit),
+                TotalCredit = g.Sum(x => x.Credit)
+            })
+            .ToDictionaryAsync(x => x.AccountId, cancellationToken);
 
-        var list = new List<AccountBalanceDto>();
-        decimal grandTotalDebit = 0;
-        decimal grandTotalCredit = 0;
+        var list = new List<AccountBalanceDto>(accounts.Count);
+        decimal grandTotalDebit = 0m;
+        decimal grandTotalCredit = 0m;
 
         foreach (var acc in accounts)
         {
-            var lines = postedLines.Where(l => l.AccountId == acc.Id).ToList();
-            var totalDr = lines.Sum(l => l.Debit);
-            var totalCr = lines.Sum(l => l.Credit);
+            var totalDr = accountTotals.TryGetValue(acc.Id, out var agg) ? agg.TotalDebit : 0m;
+            var totalCr = agg != null ? agg.TotalCredit : 0m;
             var net = acc.NormalBalance == NormalBalance.DR ? (totalDr - totalCr) : (totalCr - totalDr);
 
             grandTotalDebit += totalDr;

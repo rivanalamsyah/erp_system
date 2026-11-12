@@ -1,4 +1,5 @@
 @page "/"
+@implements IDisposable
 @inject IApplicationDbContext DbContext
 @inject ICurrentUserService CurrentUserService
 @inject NavigationManager Navigation
@@ -268,18 +269,65 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _totalSalesRevenue = await DbContext.SalesInvoices.SumAsync(i => (decimal?)i.TotalAmount) ?? 0m;
-        _totalSalesOrders = await DbContext.SalesOrders.CountAsync();
-        _totalPurchases = await DbContext.PurchaseOrders.SumAsync(p => (decimal?)p.TotalAmount) ?? 0m;
-        _totalPurchaseOrders = await DbContext.PurchaseOrders.CountAsync();
+        CurrentUserService.OnContextChanged += HandleContextChanged;
+        await LoadKpisAsync();
+    }
 
-        var balances = await DbContext.StockBalances
-            .Include(b => b.Product)
-            .ToListAsync();
-        _totalStockValuation = balances.Sum(b => b.PhysicalQuantity * (b.AverageCost > 0 ? b.AverageCost : (b.Product != null ? b.Product.PurchasePrice : 0m)));
+    private async Task LoadKpisAsync()
+    {
+        _totalSalesRevenue = await DbContext.SalesInvoices
+            .AsNoTracking()
+            .Where(i => i.Status != SalesInvoiceStatus.Cancelled)
+            .SumAsync(i => (decimal?)i.TotalAmount) ?? 0m;
 
-        _totalProducts = await DbContext.Products.IgnoreQueryFilters().CountAsync();
-        _totalEmployees = await DbContext.Employees.IgnoreQueryFilters().CountAsync();
-        _totalAuditLogs = await DbContext.AuditLogs.CountAsync();
+        _totalSalesOrders = await DbContext.SalesOrders
+            .AsNoTracking()
+            .CountAsync();
+
+        _totalPurchases = await DbContext.PurchaseOrders
+            .AsNoTracking()
+            .Where(p => p.Status != PurchaseOrderStatus.Cancelled)
+            .SumAsync(p => (decimal?)p.TotalAmount) ?? 0m;
+
+        _totalPurchaseOrders = await DbContext.PurchaseOrders
+            .AsNoTracking()
+            .CountAsync();
+
+        _totalStockValuation = await DbContext.StockBalances
+            .AsNoTracking()
+            .SumAsync(b => (decimal?)(b.PhysicalQuantity * (b.AverageCost > 0 ? b.AverageCost : b.Product.PurchasePrice))) ?? 0m;
+
+        _totalProducts = await DbContext.Products
+            .AsNoTracking()
+            .CountAsync();
+
+        _totalEmployees = await DbContext.Employees
+            .AsNoTracking()
+            .CountAsync();
+
+        _totalAuditLogs = await DbContext.AuditLogs
+            .AsNoTracking()
+            .CountAsync();
+    }
+
+    private async void HandleContextChanged()
+    {
+        try
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadKpisAsync();
+                StateHasChanged();
+            });
+        }
+        catch
+        {
+            // Ignore if circuit disposed
+        }
+    }
+
+    public void Dispose()
+    {
+        CurrentUserService.OnContextChanged -= HandleContextChanged;
     }
 }

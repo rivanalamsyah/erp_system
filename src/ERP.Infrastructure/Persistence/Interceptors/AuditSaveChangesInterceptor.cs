@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using ERP.Application.Common.Interfaces;
 using ERP.Domain.Common;
@@ -32,6 +33,7 @@ public class AuditSaveChangesInterceptor(
         if (context == null) return;
 
         var userId = currentUserService.UserId ?? Guid.Empty;
+        var ipAddress = currentUserService.IpAddress ?? "127.0.0.1";
         var now = dateTimeProvider.UtcNow;
         var auditLogs = new List<AuditLog>();
 
@@ -40,7 +42,7 @@ public class AuditSaveChangesInterceptor(
             // Abaikan tabel AuditLog itu sendiri untuk mencegah rekursi tak hingga
             if (entry.Entity is AuditLog) continue;
 
-            // 1. Audit Fields & Soft Delete
+            // 1. Audit Fields & Soft Delete via strongly-typed interfaces (tanpa refleksi)
             if (entry.Entity is ISoftDeletable softDeletable)
             {
                 if (entry.State == EntityState.Added)
@@ -49,7 +51,6 @@ public class AuditSaveChangesInterceptor(
                 }
                 else if (entry.State == EntityState.Deleted)
                 {
-                    // Konversi ke Soft Delete
                     entry.State = EntityState.Modified;
                     softDeletable.IsDeleted = true;
                     softDeletable.DeletedAtUtc = now;
@@ -57,31 +58,28 @@ public class AuditSaveChangesInterceptor(
                 }
             }
 
-            // Update created/updated timestamps pada BaseEntity
-            var entityType = entry.Entity.GetType();
-            var createdAtProp = entityType.GetProperty(nameof(BaseEntity<Guid>.CreatedAtUtc));
-            var createdByProp = entityType.GetProperty(nameof(BaseEntity<Guid>.CreatedByUserId));
-            var updatedAtProp = entityType.GetProperty(nameof(BaseEntity<Guid>.UpdatedAtUtc));
-            var updatedByProp = entityType.GetProperty(nameof(BaseEntity<Guid>.UpdatedByUserId));
-
-            if (entry.State == EntityState.Added)
+            if (entry.Entity is BaseEntity<Guid> baseEntity)
             {
-                createdAtProp?.SetValue(entry.Entity, now);
-                createdByProp?.SetValue(entry.Entity, userId);
-            }
-            else if (entry.State == EntityState.Modified)
-            {
-                updatedAtProp?.SetValue(entry.Entity, now);
-                updatedByProp?.SetValue(entry.Entity, userId);
+                if (entry.State == EntityState.Added)
+                {
+                    baseEntity.CreatedAtUtc = now;
+                    if (userId != Guid.Empty || baseEntity.CreatedByUserId == Guid.Empty)
+                    {
+                        baseEntity.CreatedByUserId = userId;
+                    }
+                }
+                else if (entry.State == EntityState.Modified)
+                {
+                    baseEntity.UpdatedAtUtc = now;
+                    baseEntity.UpdatedByUserId = userId;
+                }
             }
 
-            // 2. Audit Trail JSON Capture
+            // 2. Audit Trail JSON Capture menggunakan EF Core Metadata (tanpa refleksi GetType().GetProperty)
             if (entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
             {
-                var idProp = entityType.GetProperty("Id");
-                var entityId = idProp != null && idProp.GetValue(entry.Entity) is Guid g ? g : Guid.Empty;
-                var companyIdProp = entityType.GetProperty("CompanyId");
-                var companyId = companyIdProp != null && companyIdProp.GetValue(entry.Entity) is Guid cid ? cid : currentUserService.CompanyId;
+                var entityId = ResolveGuidProperty(entry, "Id") ?? Guid.Empty;
+                var companyId = ResolveGuidProperty(entry, "CompanyId") ?? currentUserService.CompanyId;
 
                 string action = entry.State switch
                 {
@@ -117,12 +115,13 @@ public class AuditSaveChangesInterceptor(
                 {
                     Id = Guid.NewGuid(),
                     CompanyId = companyId,
-                    EntityName = entityType.Name,
+                    EntityName = entry.Metadata.ClrType.Name,
                     EntityId = entityId,
                     Action = action,
                     OldValues = oldValues.Count > 0 ? JsonSerializer.Serialize(oldValues) : null,
                     NewValues = newValues.Count > 0 ? JsonSerializer.Serialize(newValues) : null,
                     UserId = userId,
+                    IpAddress = ipAddress,
                     CreatedAtUtc = now
                 });
             }
@@ -133,5 +132,21 @@ public class AuditSaveChangesInterceptor(
             context.Set<AuditLog>().AddRange(auditLogs);
         }
     }
-}
 
+    private static Guid? ResolveGuidProperty(EntityEntry entry, string propertyName)
+    {
+        if (entry.Entity is BaseEntity<Guid> baseEntity)
+        {
+            if (propertyName == "Id") return baseEntity.Id;
+            if (propertyName == "CompanyId") return baseEntity.CompanyId;
+        }
+
+        var propMeta = entry.Metadata.FindProperty(propertyName);
+        if (propMeta != null && entry.Property(propertyName).CurrentValue is Guid guidVal)
+        {
+            return guidVal;
+        }
+
+        return null;
+    }
+}

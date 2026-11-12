@@ -56,10 +56,16 @@ public class CreateStockAdjustmentCommandHandler(
             reason: request.Reason,
             createdByUserId: currentUserService.UserId ?? Guid.Empty);
 
+        // Batch load StockBalances in a single query (eliminates N+1 inside loop)
+        var productIds = request.Items.Select(i => i.ProductId).Distinct().ToList();
+        var balances = await context.StockBalances
+            .AsNoTracking()
+            .Where(b => b.WarehouseId == request.WarehouseId && productIds.Contains(b.ProductId))
+            .ToDictionaryAsync(b => b.ProductId, cancellationToken);
+
         foreach (var item in request.Items)
         {
-            var balance = await context.StockBalances
-                .FirstOrDefaultAsync(b => b.WarehouseId == request.WarehouseId && b.ProductId == item.ProductId, cancellationToken);
+            balances.TryGetValue(item.ProductId, out var balance);
 
             var systemQty = balance?.PhysicalQuantity ?? 0m;
             var unitCost = balance?.AverageCost ?? 0m;
@@ -93,15 +99,19 @@ public class ApproveStockAdjustmentCommandHandler(
         if (adjustment == null)
             return Result.Failure(Error.NotFound("Adjustment.NotFound", "Data penyesuaian stok tidak ditemukan."));
 
+        // Batch load StockBalances in a single query (eliminates N+1 inside loop)
+        var productIds = adjustment.Items.Select(i => i.ProductId).Distinct().ToList();
+        var balances = await context.StockBalances
+            .Where(b => b.WarehouseId == adjustment.WarehouseId && productIds.Contains(b.ProductId))
+            .ToDictionaryAsync(b => b.ProductId, cancellationToken);
+
         foreach (var item in adjustment.Items)
         {
-            var balance = await context.StockBalances
-                .FirstOrDefaultAsync(b => b.WarehouseId == adjustment.WarehouseId && b.ProductId == item.ProductId, cancellationToken);
-
-            if (balance == null)
+            if (!balances.TryGetValue(item.ProductId, out var balance))
             {
                 balance = StockBalance.Create(adjustment.CompanyId, adjustment.WarehouseId, item.ProductId);
                 context.StockBalances.Add(balance);
+                balances[item.ProductId] = balance;
             }
 
             var diff = item.DifferenceQuantity;
@@ -152,4 +162,3 @@ public class ApproveStockAdjustmentCommandHandler(
         return Result.Success();
     }
 }
-

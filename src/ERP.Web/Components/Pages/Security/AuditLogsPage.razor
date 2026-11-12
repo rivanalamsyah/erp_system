@@ -1,4 +1,5 @@
 @page "/security/audit-logs"
+@attribute [Authorize(Policy = Permissions.Security.AuditView)]
 @inject IApplicationDbContext DbContext
 @inject IDialogService DialogService
 @using ERP.Domain.Entities.Audit
@@ -16,11 +17,11 @@
 </div>
 
 <MudCard Elevation="1" Class="rounded-lg border border-slate-200">
-    <MudTable Items="_logs" Dense="true" Hover="true" Striped="true" Loading="@_loading">
+    <MudTable Items="FilteredLogs" Dense="true" Hover="true" Striped="true" Loading="@_loading">
         <ToolBarContent>
             <MudText Typo="Typo.h6" Style="font-weight: 600;">Riwayat Audit Transaksi</MudText>
             <MudSpacer />
-            <MudTextField @bind-Value="_searchTerm" Placeholder="Cari nama entitas, aksi..." Adornment="Adornment.Start"
+            <MudTextField @bind-Value="_searchTerm" Placeholder="Cari nama entitas, aksi, IP..." Adornment="Adornment.Start"
                           AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Small" Class="mt-0"
                           Clearable="true" Immediate="true" />
         </ToolBarContent>
@@ -106,12 +107,21 @@
 
     private readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true };
 
+    private IEnumerable<AuditLog> FilteredLogs => string.IsNullOrWhiteSpace(_searchTerm)
+        ? _logs
+        : _logs.Where(l =>
+            l.EntityName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+            l.Action.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+            l.EntityId.ToString().Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+            (l.IpAddress != null && l.IpAddress.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)));
+
     protected override async Task OnInitializedAsync()
     {
         _loading = true;
         try
         {
             _logs = await DbContext.AuditLogs
+                .AsNoTracking()
                 .OrderByDescending(a => a.CreatedAtUtc)
                 .Take(200)
                 .ToListAsync();
@@ -136,4 +146,3 @@
         _detailDialogVisible = true;
     }
 }
-

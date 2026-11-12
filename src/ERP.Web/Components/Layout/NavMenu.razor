@@ -1,4 +1,6 @@
+@implements IDisposable
 @inject NavigationManager Navigation
+@inject ICurrentUserService CurrentUserService
 
 <MudNavMenu Bordered="false" Rounded="false" Margin="Margin.Dense" Color="Color.Primary" Class="px-2 pt-2">
     <div class="d-flex align-center px-3 py-3 mb-2" style="background-color: rgba(255,255,255,0.04); border-radius: 8px;">
@@ -19,131 +21,232 @@
     </MudNavLink>
 
     <!-- 2. Master Data -->
-    <MudNavGroup Title="Master Data" Icon="@Icons.Material.Filled.FolderShared" Expanded="true">
-        <MudNavLink Href="/master/companies" Icon="@Icons.Material.Outlined.Business">
-            Perusahaan & Holding
-        </MudNavLink>
-        <MudNavLink Href="/master/branches" Icon="@Icons.Material.Outlined.Store">
-            Kantor Cabang
-        </MudNavLink>
-        <MudNavLink Href="/master/departments" Icon="@Icons.Material.Outlined.Groups">
-            Departemen
-        </MudNavLink>
-        <MudNavLink Href="/master/products" Icon="@Icons.Material.Outlined.Inventory2">
-            Produk & Katalog
-        </MudNavLink>
-        <MudNavLink Href="/master/customers" Icon="@Icons.Material.Outlined.People">
-            Pelanggan (Customers)
-        </MudNavLink>
-        <MudNavLink Href="/master/suppliers" Icon="@Icons.Material.Outlined.LocalShipping">
-            Pemasok (Suppliers)
-        </MudNavLink>
-    </MudNavGroup>
+    @if (HasAny(Permissions.Master.CompanyView, Permissions.Master.CompanyManage, Permissions.Master.DepartmentView, Permissions.Master.DepartmentManage, Permissions.Master.ProductView, Permissions.Master.ProductManage, Permissions.Master.CustomerView, Permissions.Master.CustomerManage, Permissions.Master.SupplierView, Permissions.Master.SupplierManage))
+    {
+        <MudNavGroup Title="Master Data" Icon="@Icons.Material.Filled.FolderShared" Expanded="true">
+            @if (HasAny(Permissions.Master.CompanyView, Permissions.Master.CompanyManage))
+            {
+                <MudNavLink Href="/master/companies" Icon="@Icons.Material.Outlined.Business">
+                    Perusahaan & Holding
+                </MudNavLink>
+                <MudNavLink Href="/master/branches" Icon="@Icons.Material.Outlined.Store">
+                    Kantor Cabang
+                </MudNavLink>
+            }
+            @if (HasAny(Permissions.Master.DepartmentView, Permissions.Master.DepartmentManage))
+            {
+                <MudNavLink Href="/master/departments" Icon="@Icons.Material.Outlined.Groups">
+                    Departemen
+                </MudNavLink>
+            }
+            @if (HasAny(Permissions.Master.ProductView, Permissions.Master.ProductManage))
+            {
+                <MudNavLink Href="/master/products" Icon="@Icons.Material.Outlined.Inventory2">
+                    Produk & Katalog
+                </MudNavLink>
+            }
+            @if (HasAny(Permissions.Master.CustomerView, Permissions.Master.CustomerManage))
+            {
+                <MudNavLink Href="/master/customers" Icon="@Icons.Material.Outlined.People">
+                    Pelanggan (Customers)
+                </MudNavLink>
+            }
+            @if (HasAny(Permissions.Master.SupplierView, Permissions.Master.SupplierManage))
+            {
+                <MudNavLink Href="/master/suppliers" Icon="@Icons.Material.Outlined.LocalShipping">
+                    Pemasok (Suppliers)
+                </MudNavLink>
+            }
+        </MudNavGroup>
+    }
 
     <!-- 3. Penjualan & Distribusi -->
-    <MudNavGroup Title="Penjualan (Sales)" Icon="@Icons.Material.Filled.ShoppingCart" Expanded="false">
-        <MudNavLink Href="/sales/quotations" Icon="@Icons.Material.Outlined.RequestQuote">
-            Penawaran Harga (SQ)
-        </MudNavLink>
-        <MudNavLink Href="/sales/orders" Icon="@Icons.Material.Outlined.ShoppingCartCheckout">
-            Pesanan Penjualan (SO)
-        </MudNavLink>
-        <MudNavLink Href="/sales/deliveries" Icon="@Icons.Material.Outlined.LocalShipping">
-            Surat Jalan & Pengiriman (DO)
-        </MudNavLink>
-        <MudNavLink Href="/sales/invoices" Icon="@Icons.Material.Outlined.ReceiptLong">
-            Faktur Penjualan (SI)
-        </MudNavLink>
-    </MudNavGroup>
+    @if (HasAny(Permissions.Sales.QuotationView, Permissions.Sales.QuotationCreate, Permissions.Sales.OrderView, Permissions.Sales.OrderCreate, Permissions.Sales.DeliveryView, Permissions.Sales.DeliveryDispatch, Permissions.Sales.InvoiceView, Permissions.Sales.InvoiceIssue))
+    {
+        <MudNavGroup Title="Penjualan (Sales)" Icon="@Icons.Material.Filled.ShoppingCart" Expanded="false">
+            <MudNavLink Href="/sales/quotations" Icon="@Icons.Material.Outlined.RequestQuote">
+                Penawaran Harga (SQ)
+            </MudNavLink>
+            <MudNavLink Href="/sales/orders" Icon="@Icons.Material.Outlined.ShoppingCartCheckout">
+                Pesanan Penjualan (SO)
+            </MudNavLink>
+            <MudNavLink Href="/sales/deliveries" Icon="@Icons.Material.Outlined.LocalShipping">
+                Surat Jalan & Pengiriman (DO)
+            </MudNavLink>
+            <MudNavLink Href="/sales/invoices" Icon="@Icons.Material.Outlined.ReceiptLong">
+                Faktur Penjualan (SI)
+            </MudNavLink>
+        </MudNavGroup>
+    }
 
     <!-- 4. Pengadaan (Procurement) -->
-    <MudNavGroup Title="Pengadaan (Procurement)" Icon="@Icons.Material.Filled.ShoppingBag" Expanded="false">
-        <MudNavLink Href="/procurement/requests" Icon="@Icons.Material.Outlined.Assignment">
-            Permintaan Pembelian (PR)
-        </MudNavLink>
-        <MudNavLink Href="/procurement/orders" Icon="@Icons.Material.Outlined.FactCheck">
-            Pesanan Pembelian (PO)
-        </MudNavLink>
-        <MudNavLink Href="/procurement/receipts" Icon="@Icons.Material.Outlined.MoveToInbox">
-            Penerimaan Barang (GRN)
-        </MudNavLink>
-        <MudNavLink Href="/procurement/bills" Icon="@Icons.Material.Outlined.Payment">
-            Tagihan Pemasok (Vendor Bills)
-        </MudNavLink>
-    </MudNavGroup>
+    @if (HasAny(Permissions.Procurement.PrView, Permissions.Procurement.PrCreate, Permissions.Procurement.PoView, Permissions.Procurement.PoCreate, Permissions.Procurement.GrnView, Permissions.Procurement.GrnCreate, Permissions.Procurement.GrnReceive, Permissions.Procurement.BillView, Permissions.Procurement.BillCreate, Permissions.Procurement.BillPost))
+    {
+        <MudNavGroup Title="Pengadaan (Procurement)" Icon="@Icons.Material.Filled.ShoppingBag" Expanded="false">
+            <MudNavLink Href="/procurement/requests" Icon="@Icons.Material.Outlined.Assignment">
+                Permintaan Pembelian (PR)
+            </MudNavLink>
+            <MudNavLink Href="/procurement/orders" Icon="@Icons.Material.Outlined.FactCheck">
+                Pesanan Pembelian (PO)
+            </MudNavLink>
+            <MudNavLink Href="/procurement/receipts" Icon="@Icons.Material.Outlined.MoveToInbox">
+                Penerimaan Barang (GRN)
+            </MudNavLink>
+            <MudNavLink Href="/procurement/bills" Icon="@Icons.Material.Outlined.Payment">
+                Tagihan Pemasok (Vendor Bills)
+            </MudNavLink>
+        </MudNavGroup>
+    }
 
     <!-- 5. Persediaan & Gudang -->
-    <MudNavGroup Title="Persediaan (Inventory)" Icon="@Icons.Material.Filled.Warehouse" Expanded="false">
-        <MudNavLink Href="/inventory/stock" Icon="@Icons.Material.Outlined.Layers">
-            Saldo & Kartu Stok
-        </MudNavLink>
-        <MudNavLink Href="/inventory/transfers" Icon="@Icons.Material.Outlined.SwapHoriz">
-            Transfer Antar Gudang
-        </MudNavLink>
-        <MudNavLink Href="/inventory/adjustments" Icon="@Icons.Material.Outlined.Tune">
-            Penyesuaian & Opname
-        </MudNavLink>
-    </MudNavGroup>
+    @if (HasAny(Permissions.Inventory.StockView, Permissions.Inventory.TransferCreate, Permissions.Inventory.AdjustmentApprove))
+    {
+        <MudNavGroup Title="Persediaan (Inventory)" Icon="@Icons.Material.Filled.Warehouse" Expanded="false">
+            <MudNavLink Href="/inventory/stock" Icon="@Icons.Material.Outlined.Layers">
+                Saldo & Kartu Stok
+            </MudNavLink>
+            <MudNavLink Href="/inventory/transfers" Icon="@Icons.Material.Outlined.SwapHoriz">
+                Transfer Antar Gudang
+            </MudNavLink>
+            <MudNavLink Href="/inventory/adjustments" Icon="@Icons.Material.Outlined.Tune">
+                Penyesuaian & Opname
+            </MudNavLink>
+        </MudNavGroup>
+    }
 
     <!-- 6. Keuangan & Akuntansi -->
-    <MudNavGroup Title="Keuangan & Akuntansi" Icon="@Icons.Material.Filled.AccountBalance" Expanded="false">
-        <MudNavLink Href="/finance/chart-of-accounts" Icon="@Icons.Material.Outlined.AccountTree">
-            Bagan Akun (COA)
-        </MudNavLink>
-        <MudNavLink Href="/finance/journals" Icon="@Icons.Material.Outlined.Book">
-            Buku Jurnal Umum
-        </MudNavLink>
-        <MudNavLink Href="/finance/payments" Icon="@Icons.Material.Outlined.AttachMoney">
-            Kas & Bank
-        </MudNavLink>
-        <MudNavLink Href="/finance/period-closing" Icon="@Icons.Material.Outlined.LockClock">
-            Penutupan Periode Fiskal
-        </MudNavLink>
-    </MudNavGroup>
+    @if (HasAny(Permissions.Finance.CoaView, Permissions.Finance.CoaManage, Permissions.Finance.JournalView, Permissions.Finance.JournalCreate, Permissions.Finance.PaymentView, Permissions.Finance.PaymentProcess, Permissions.Finance.PeriodClose))
+    {
+        <MudNavGroup Title="Keuangan & Akuntansi" Icon="@Icons.Material.Filled.AccountBalance" Expanded="false">
+            <MudNavLink Href="/finance/chart-of-accounts" Icon="@Icons.Material.Outlined.AccountTree">
+                Bagan Akun (COA)
+            </MudNavLink>
+            <MudNavLink Href="/finance/journals" Icon="@Icons.Material.Outlined.Book">
+                Buku Jurnal Umum
+            </MudNavLink>
+            <MudNavLink Href="/finance/payments" Icon="@Icons.Material.Outlined.AttachMoney">
+                Kas & Bank
+            </MudNavLink>
+            <MudNavLink Href="/finance/period-closing" Icon="@Icons.Material.Outlined.LockClock">
+                Penutupan Periode Fiskal
+            </MudNavLink>
+        </MudNavGroup>
+    }
 
     <!-- 7. SDM & Payroll -->
-    <MudNavGroup Title="Sumber Daya Manusia" Icon="@Icons.Material.Filled.Badge" Expanded="false">
-        <MudNavLink Href="/hr/employees" Icon="@Icons.Material.Outlined.PersonSearch">
-            Master Data Karyawan
-        </MudNavLink>
-        <MudNavLink Href="/hr/attendance" Icon="@Icons.Material.Outlined.AccessTime">
-            Presensi & Kehadiran
-        </MudNavLink>
-        <MudNavLink Href="/hr/leaves" Icon="@Icons.Material.Outlined.EventBusy">
-            Pengajuan & Otorisasi Cuti
-        </MudNavLink>
-        <MudNavLink Href="/hr/payroll" Icon="@Icons.Material.Outlined.MonetizationOn">
-            Proses Payroll Bulanan
-        </MudNavLink>
-    </MudNavGroup>
+    @if (HasAny(Permissions.Hr.EmployeeView, Permissions.Hr.EmployeeManage, Permissions.Hr.AttendanceView, Permissions.Hr.AttendanceManage, Permissions.Hr.LeaveView, Permissions.Hr.LeaveApprove, Permissions.Hr.PayrollView, Permissions.Hr.PayrollProcess))
+    {
+        <MudNavGroup Title="Sumber Daya Manusia" Icon="@Icons.Material.Filled.Badge" Expanded="false">
+            @if (HasAny(Permissions.Hr.EmployeeView, Permissions.Hr.EmployeeManage))
+            {
+                <MudNavLink Href="/hr/employees" Icon="@Icons.Material.Outlined.PersonSearch">
+                    Master Data Karyawan
+                </MudNavLink>
+            }
+            @if (HasAny(Permissions.Hr.AttendanceView, Permissions.Hr.AttendanceManage))
+            {
+                <MudNavLink Href="/hr/attendance" Icon="@Icons.Material.Outlined.AccessTime">
+                    Presensi & Kehadiran
+                </MudNavLink>
+            }
+            @if (HasAny(Permissions.Hr.LeaveView, Permissions.Hr.LeaveApprove))
+            {
+                <MudNavLink Href="/hr/leaves" Icon="@Icons.Material.Outlined.EventBusy">
+                    Pengajuan & Otorisasi Cuti
+                </MudNavLink>
+            }
+            @if (HasAny(Permissions.Hr.PayrollView, Permissions.Hr.PayrollProcess))
+            {
+                <MudNavLink Href="/hr/payroll" Icon="@Icons.Material.Outlined.MonetizationOn">
+                    Proses Payroll Bulanan
+                </MudNavLink>
+            }
+        </MudNavGroup>
+    }
 
     <!-- 8. Laporan & Analitik -->
-    <MudNavGroup Title="Laporan & Dokumen" Icon="@Icons.Material.Filled.Assessment" Expanded="false">
-        <MudNavLink Href="/reports/financial" Icon="@Icons.Material.Outlined.BarChart">
-            Laporan Finansial (BS & P&L)
-        </MudNavLink>
-        <MudNavLink Href="/reports/sales" Icon="@Icons.Material.Outlined.TrendingUp">
-            Analitik Omset Penjualan
-        </MudNavLink>
-        <MudNavLink Href="/reports/inventory" Icon="@Icons.Material.Outlined.PieChart">
-            Valuasi & Perputaran Stok
-        </MudNavLink>
-    </MudNavGroup>
+    @if (HasAny(Permissions.Reports.FinancialView, Permissions.Sales.OrderView, Permissions.Inventory.StockView))
+    {
+        <MudNavGroup Title="Laporan & Dokumen" Icon="@Icons.Material.Filled.Assessment" Expanded="false">
+            @if (CurrentUserService.HasPermission(Permissions.Reports.FinancialView))
+            {
+                <MudNavLink Href="/reports/financial" Icon="@Icons.Material.Outlined.BarChart">
+                    Laporan Finansial (BS & P&L)
+                </MudNavLink>
+            }
+            @if (HasAny(Permissions.Reports.FinancialView, Permissions.Sales.OrderView))
+            {
+                <MudNavLink Href="/reports/sales" Icon="@Icons.Material.Outlined.TrendingUp">
+                    Analitik Omset Penjualan
+                </MudNavLink>
+            }
+            @if (HasAny(Permissions.Reports.FinancialView, Permissions.Inventory.StockView))
+            {
+                <MudNavLink Href="/reports/inventory" Icon="@Icons.Material.Outlined.PieChart">
+                    Valuasi & Perputaran Stok
+                </MudNavLink>
+            }
+        </MudNavGroup>
+    }
 
     <!-- 9. Keamanan & Pengaturan -->
-    <MudNavGroup Title="Tata Kelola & Akses" Icon="@Icons.Material.Filled.AdminPanelSettings" Expanded="false">
-        <MudNavLink Href="/security/users" Icon="@Icons.Material.Outlined.ManageAccounts">
-            Pengguna & Password
-        </MudNavLink>
-        <MudNavLink Href="/security/roles" Icon="@Icons.Material.Outlined.Security">
-            Role & Matriks Izin (PBAC)
-        </MudNavLink>
-        <MudNavLink Href="/security/audit-logs" Icon="@Icons.Material.Outlined.History">
-            Jejak Audit Sistem
-        </MudNavLink>
-        <MudNavLink Href="/settings" Icon="@Icons.Material.Outlined.Settings">
-            Pengaturan Sistem & Kebijakan
-        </MudNavLink>
-    </MudNavGroup>
+    @if (HasAny(Permissions.Security.UsersManage, Permissions.Security.RolesManage, Permissions.Security.AuditView, Permissions.Master.CompanyManage))
+    {
+        <MudNavGroup Title="Tata Kelola & Akses" Icon="@Icons.Material.Filled.AdminPanelSettings" Expanded="false">
+            @if (CurrentUserService.HasPermission(Permissions.Security.UsersManage))
+            {
+                <MudNavLink Href="/security/users" Icon="@Icons.Material.Outlined.ManageAccounts">
+                    Pengguna & Password
+                </MudNavLink>
+            }
+            @if (CurrentUserService.HasPermission(Permissions.Security.RolesManage))
+            {
+                <MudNavLink Href="/security/roles" Icon="@Icons.Material.Outlined.Security">
+                    Role & Matriks Izin (PBAC)
+                </MudNavLink>
+            }
+            @if (CurrentUserService.HasPermission(Permissions.Security.AuditView))
+            {
+                <MudNavLink Href="/security/audit-logs" Icon="@Icons.Material.Outlined.History">
+                    Jejak Audit Sistem
+                </MudNavLink>
+            }
+            @if (CurrentUserService.HasPermission(Permissions.Master.CompanyManage))
+            {
+                <MudNavLink Href="/settings" Icon="@Icons.Material.Outlined.Settings">
+                    Pengaturan Sistem & Kebijakan
+                </MudNavLink>
+            }
+        </MudNavGroup>
+    }
 </MudNavMenu>
 
+@code {
+    protected override void OnInitialized()
+    {
+        CurrentUserService.OnContextChanged += HandleContextChanged;
+    }
+
+    private bool HasAny(params string[] permissions)
+    {
+        if (!CurrentUserService.IsAuthenticated)
+            return false;
+
+        foreach (var p in permissions)
+        {
+            if (CurrentUserService.HasPermission(p))
+                return true;
+        }
+        return false;
+    }
+
+    private void HandleContextChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        CurrentUserService.OnContextChanged -= HandleContextChanged;
+    }
+}

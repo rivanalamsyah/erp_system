@@ -12,12 +12,12 @@ public record GetGoodsReceiptsQuery(
     Guid? WarehouseId = null,
     string? SearchTerm = null,
     int PageNumber = 1,
-    int PageSize = 10) : IRequest<PagedResult<GoodsReceiptDto>>;
+    int PageSize = 10) : IRequest<Result<PagedResult<GoodsReceiptDto>>>;
 
 public class GetGoodsReceiptsQueryHandler(IApplicationDbContext context)
-    : IRequestHandler<GetGoodsReceiptsQuery, PagedResult<GoodsReceiptDto>>
+    : IRequestHandler<GetGoodsReceiptsQuery, Result<PagedResult<GoodsReceiptDto>>>
 {
-    public async Task<PagedResult<GoodsReceiptDto>> Handle(
+    public async Task<Result<PagedResult<GoodsReceiptDto>>> Handle(
         GetGoodsReceiptsQuery request,
         CancellationToken cancellationToken)
     {
@@ -74,6 +74,7 @@ public class GetGoodsReceiptsQueryHandler(IApplicationDbContext context)
             ))
             .ToListAsync(cancellationToken);
 
-        return new PagedResult<GoodsReceiptDto>(items, totalCount, request.PageNumber, request.PageSize);
+        return Result<PagedResult<GoodsReceiptDto>>.Success(
+            new PagedResult<GoodsReceiptDto>(items, totalCount, request.PageNumber, request.PageSize));
     }
 }

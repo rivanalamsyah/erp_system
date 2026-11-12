@@ -1,10 +1,13 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using ERP.Application.Common.Interfaces;
+using ERP.Application.Common.Security;
 using ERP.Shared;
+using ERP.Shared.Security;
 
 namespace ERP.Application.Features.Inventory.Warehouses;
 
+[RequirePermission(Permissions.Inventory.StockView)]
 public record GetWarehousesQuery(
     Guid? BranchId = null,
     string? SearchTerm = null,

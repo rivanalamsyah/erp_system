@@ -12,12 +12,12 @@ public record GetVendorBillsQuery(
     Guid? SupplierId = null,
     string? SearchTerm = null,
     int PageNumber = 1,
-    int PageSize = 10) : IRequest<PagedResult<VendorBillDto>>;
+    int PageSize = 10) : IRequest<Result<PagedResult<VendorBillDto>>>;
 
 public class GetVendorBillsQueryHandler(IApplicationDbContext context)
-    : IRequestHandler<GetVendorBillsQuery, PagedResult<VendorBillDto>>
+    : IRequestHandler<GetVendorBillsQuery, Result<PagedResult<VendorBillDto>>>
 {
-    public async Task<PagedResult<VendorBillDto>> Handle(
+    public async Task<Result<PagedResult<VendorBillDto>>> Handle(
         GetVendorBillsQuery request,
         CancellationToken cancellationToken)
     {
@@ -65,7 +65,8 @@ public class GetVendorBillsQueryHandler(IApplicationDbContext context)
             ))
             .ToListAsync(cancellationToken);
 
-        return new PagedResult<VendorBillDto>(items, totalCount, request.PageNumber, request.PageSize);
+        return Result<PagedResult<VendorBillDto>>.Success(
+            new PagedResult<VendorBillDto>(items, totalCount, request.PageNumber, request.PageSize));
     }
 }
 

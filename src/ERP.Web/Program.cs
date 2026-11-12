@@ -2,32 +2,65 @@ using System.Threading.RateLimiting;
 using ERP.Application;
 using ERP.Infrastructure;
 using ERP.Infrastructure.Identity.Models;
+using ERP.Infrastructure.Persistence.Context;
 using ERP.Infrastructure.Persistence.Seeders;
 using ERP.Web.Components;
+using ERP.Web.Security;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Components.Server.Circuits;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using MudBlazor.Services;
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure Serilog structured logging (Console + Rolling File)
+builder.Host.UseSerilog((context, services, configuration) => configuration
+    .ReadFrom.Configuration(context.Configuration)
+    .ReadFrom.Services(services)
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .WriteTo.File("logs/erp-.log", rollingInterval: RollingInterval.Day, retainedFileCountLimit: 30));
 
 // Add Application & Infrastructure Clean Architecture layers
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
+// Register Dynamic PBAC Policy Provider, Handler & Blazor Circuit User Synchronizer
+builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionAuthorizationPolicyProvider>();
+builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
+builder.Services.AddScoped<CircuitHandler, UserCircuitHandler>();
+
 // Add MudBlazor services
 builder.Services.AddMudServices();
 
-// Rate Limiting Policy for Authentication Endpoints
+// Configure Forwarded Headers for reverse proxy client IP resolution
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+// Rate Limiting Policy for Authentication Endpoints (Partitioned per Client IP)
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddFixedWindowLimiter("LoginPolicy", opt =>
+    options.AddPolicy("LoginPolicy", httpContext =>
     {
-        opt.PermitLimit = 5;
-        opt.Window = TimeSpan.FromMinutes(1);
-        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-        opt.QueueLimit = 0;
+        var clientIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: clientIp,
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
     });
 });
 
@@ -38,6 +71,10 @@ builder.Services.AddAntiforgery(options =>
     options.Cookie.SameSite = SameSiteMode.Strict;
     options.Cookie.HttpOnly = true;
 });
+
+// Add Health Checks (PostgreSQL connectivity verification)
+builder.Services.AddHealthChecks()
+    .AddTypeActivatedCheck<PostgresDatabaseHealthCheck>("postgresql", HealthStatus.Unhealthy);
 
 // Add Blazor Server with optimized circuit retention and SignalR resilience
 builder.Services.AddRazorComponents()
@@ -61,11 +98,14 @@ builder.Services.AddCascadingAuthenticationState();
 var app = builder.Build();
 
 // Seed initial baseline data (Company, Branch, Roles, Permissions, Super Admin)
-using (var scope = app.Services.CreateScope())
+if (app.Environment.IsDevelopment() || builder.Configuration.GetValue("Database:RunMigrationsOnStartup", true))
 {
+    using var scope = app.Services.CreateScope();
     var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
     await seeder.SeedAsync();
 }
+
+app.UseForwardedHeaders();
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
@@ -84,7 +124,10 @@ app.UseAuthorization();
 
 app.UseAntiforgery();
 
-// Authentication Endpoints with CSRF Protection & Rate Limiting
+// Health Check Endpoint for Container / Load Balancer Probes
+app.MapHealthChecks("/health").AllowAnonymous();
+
+// Authentication Endpoints with CSRF Protection & Per-IP Rate Limiting
 app.MapPost("/api/auth/login", async (
     [FromForm] string email,
     [FromForm] string password,
@@ -122,3 +165,23 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.Run();
+
+public sealed class PostgresDatabaseHealthCheck(ApplicationDbContext dbContext) : IHealthCheck
+{
+    public async Task<HealthCheckResult> CheckHealthAsync(
+        HealthCheckContext context,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var canConnect = await dbContext.Database.CanConnectAsync(cancellationToken);
+            return canConnect
+                ? HealthCheckResult.Healthy("PostgreSQL database connection is healthy.")
+                : HealthCheckResult.Unhealthy("PostgreSQL database cannot be reached.");
+        }
+        catch (Exception ex)
+        {
+            return HealthCheckResult.Unhealthy("PostgreSQL health check failed.", ex);
+        }
+    }
+}

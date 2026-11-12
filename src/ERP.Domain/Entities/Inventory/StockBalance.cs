@@ -13,6 +13,7 @@ public class StockBalance
     public decimal AvailableQuantity => PhysicalQuantity - ReservedQuantity;
     public decimal AverageCost { get; private set; }
     public DateTime LastUpdatedAtUtc { get; private set; } = DateTime.UtcNow;
+    public uint Version { get; set; }
 
     public Company Company { get; private set; } = default!;
     public Warehouse Warehouse { get; private set; } = default!;

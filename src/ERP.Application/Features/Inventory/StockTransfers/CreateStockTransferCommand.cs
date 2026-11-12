@@ -95,13 +95,16 @@ public class DispatchStockTransferCommandHandler(
         if (transfer == null)
             return Result.Failure(Error.NotFound("Transfer.NotFound", "Data transfer antar-gudang tidak ditemukan."));
 
+        // Batch load source warehouse stock balances in one query (eliminates N+1 inside loop)
+        var productIds = transfer.Items.Select(i => i.ProductId).Distinct().ToList();
+        var sourceBalances = await context.StockBalances
+            .Where(b => b.WarehouseId == transfer.SourceWarehouseId && productIds.Contains(b.ProductId))
+            .ToDictionaryAsync(b => b.ProductId, cancellationToken);
+
         // 1. Validasi kecukupan stok di gudang asal & kurangi stok fisik
         foreach (var item in transfer.Items)
         {
-            var balance = await context.StockBalances
-                .FirstOrDefaultAsync(b => b.WarehouseId == transfer.SourceWarehouseId && b.ProductId == item.ProductId, cancellationToken);
-
-            if (balance == null || balance.PhysicalQuantity < item.Quantity)
+            if (!sourceBalances.TryGetValue(item.ProductId, out var balance) || balance.PhysicalQuantity < item.Quantity)
             {
                 return Result.Failure(Error.Validation(
                     "Stock.Insufficient",
@@ -153,24 +156,31 @@ public class ReceiveStockTransferCommandHandler(
         if (transfer == null)
             return Result.Failure(Error.NotFound("Transfer.NotFound", "Data transfer antar-gudang tidak ditemukan."));
 
+        // Batch load TransferOut movements and destination stock balances (eliminates 2*N queries inside loop)
+        var productIds = transfer.Items.Select(i => i.ProductId).Distinct().ToList();
+
+        var outMovements = await context.StockMovements
+            .AsNoTracking()
+            .Where(m => m.ReferenceNumber == transfer.TransferNumber && productIds.Contains(m.ProductId) && m.Direction == "OUT")
+            .ToListAsync(cancellationToken);
+
+        var outCostsByProduct = outMovements
+            .GroupBy(m => m.ProductId)
+            .ToDictionary(g => g.Key, g => g.First().UnitCost);
+
+        var destBalances = await context.StockBalances
+            .Where(b => b.WarehouseId == transfer.DestinationWarehouseId && productIds.Contains(b.ProductId))
+            .ToDictionaryAsync(b => b.ProductId, cancellationToken);
+
         foreach (var item in transfer.Items)
         {
-            // Ambil average cost dari pergerakan TransferOut sebelumnya
-            var outMovement = await context.StockMovements
-                .FirstOrDefaultAsync(m =>
-                    m.ReferenceNumber == transfer.TransferNumber &&
-                    m.ProductId == item.ProductId &&
-                    m.Direction == "OUT", cancellationToken);
+            var unitCost = outCostsByProduct.GetValueOrDefault(item.ProductId, 0m);
 
-            var unitCost = outMovement?.UnitCost ?? 0m;
-
-            var destBalance = await context.StockBalances
-                .FirstOrDefaultAsync(b => b.WarehouseId == transfer.DestinationWarehouseId && b.ProductId == item.ProductId, cancellationToken);
-
-            if (destBalance == null)
+            if (!destBalances.TryGetValue(item.ProductId, out var destBalance))
             {
                 destBalance = StockBalance.Create(transfer.CompanyId, transfer.DestinationWarehouseId, item.ProductId);
                 context.StockBalances.Add(destBalance);
+                destBalances[item.ProductId] = destBalance;
             }
 
             destBalance.AddStock(item.Quantity, unitCost);
@@ -197,4 +207,3 @@ public class ReceiveStockTransferCommandHandler(
         return Result.Success();
     }
 }
-

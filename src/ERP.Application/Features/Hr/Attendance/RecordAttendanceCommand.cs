@@ -1,12 +1,15 @@
 using ERP.Application.Common.Interfaces;
+using ERP.Application.Common.Security;
 using ERP.Domain.Entities.Hr;
 using ERP.Shared;
+using ERP.Shared.Security;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Application.Features.Hr.Attendance;
 
+[RequirePermission(Permissions.Hr.AttendanceManage)]
 public record RecordAttendanceCommand(
     Guid EmployeeId,
     DateOnly AttendanceDate,

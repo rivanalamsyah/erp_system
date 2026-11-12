@@ -1,27 +1,26 @@
 using ERP.Application.Common.Interfaces;
+using ERP.Application.Common.Security;
 using ERP.Domain.Entities.Sales;
 using ERP.Shared;
+using ERP.Shared.Security;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Application.Features.Reports;
 
+[RequirePermission(Permissions.Reports.FinancialView)]
 public record GetSalesAnalyticsQuery(Guid CompanyId, DateOnly? StartDate = null, DateOnly? EndDate = null) : IRequest<Result<SalesAnalyticsDto>>;
 
-public class GetSalesAnalyticsQueryHandler : IRequestHandler<GetSalesAnalyticsQuery, Result<SalesAnalyticsDto>>
+public class GetSalesAnalyticsQueryHandler(IApplicationDbContext context, ICurrentUserService currentUserService)
+    : IRequestHandler<GetSalesAnalyticsQuery, Result<SalesAnalyticsDto>>
 {
-    private readonly IApplicationDbContext _context;
-
-    public GetSalesAnalyticsQueryHandler(IApplicationDbContext context)
-    {
-        _context = context;
-    }
-
     public async Task<Result<SalesAnalyticsDto>> Handle(GetSalesAnalyticsQuery request, CancellationToken cancellationToken)
     {
-        var invQuery = _context.SalesInvoices
-            .Include(i => i.Customer)
-            .Where(i => i.CompanyId == request.CompanyId && i.Status != SalesInvoiceStatus.Cancelled);
+        var companyId = request.CompanyId != Guid.Empty ? request.CompanyId : currentUserService.CompanyId;
+
+        var invQuery = context.SalesInvoices
+            .AsNoTracking()
+            .Where(i => i.CompanyId == companyId && i.Status != SalesInvoiceStatus.Cancelled);
 
         if (request.StartDate.HasValue)
         {
@@ -33,18 +32,30 @@ public class GetSalesAnalyticsQueryHandler : IRequestHandler<GetSalesAnalyticsQu
             invQuery = invQuery.Where(i => i.InvoiceDate <= request.EndDate.Value);
         }
 
-        var invoices = await invQuery.ToListAsync(cancellationToken);
-
-        var totalInvoiced = invoices.Sum(i => i.TotalAmount);
-        var totalCollected = invoices.Sum(i => i.PaidAmount);
+        var totalInvoices = await invQuery.CountAsync(cancellationToken);
+        var totalInvoiced = totalInvoices > 0 ? await invQuery.SumAsync(i => i.TotalAmount, cancellationToken) : 0m;
+        var totalCollected = totalInvoices > 0 ? await invQuery.SumAsync(i => i.PaidAmount, cancellationToken) : 0m;
         var totalOutstandingAr = totalInvoiced - totalCollected;
 
-        var totalOrders = await _context.SalesOrders
-            .CountAsync(s => s.CompanyId == request.CompanyId, cancellationToken);
+        var soQuery = context.SalesOrders
+            .AsNoTracking()
+            .Where(s => s.CompanyId == companyId && s.Status != SalesOrderStatus.Cancelled);
 
-        // Top Customers
-        var topCustomers = invoices
-            .GroupBy(i => new { i.CustomerId, CustomerName = i.Customer != null ? i.Customer.Name : "Unknown" })
+        if (request.StartDate.HasValue)
+        {
+            soQuery = soQuery.Where(s => s.OrderDate >= request.StartDate.Value);
+        }
+
+        if (request.EndDate.HasValue)
+        {
+            soQuery = soQuery.Where(s => s.OrderDate <= request.EndDate.Value);
+        }
+
+        var totalOrders = await soQuery.CountAsync(cancellationToken);
+
+        // Top 5 Customers aggregated directly in SQL
+        var topCustomers = await invQuery
+            .GroupBy(i => new { i.CustomerId, CustomerName = i.Customer.Name })
             .Select(g => new TopCustomerDto(
                 g.Key.CustomerId,
                 g.Key.CustomerName,
@@ -53,16 +64,25 @@ public class GetSalesAnalyticsQueryHandler : IRequestHandler<GetSalesAnalyticsQu
             ))
             .OrderByDescending(c => c.TotalRevenue)
             .Take(5)
-            .ToList();
-
-        // Top Products from SalesOrderItems
-        var orderItems = await _context.SalesOrderItems
-            .Include(oi => oi.Product)
-            .Where(oi => oi.SalesOrder.CompanyId == request.CompanyId)
             .ToListAsync(cancellationToken);
 
-        var topProducts = orderItems
-            .GroupBy(oi => new { oi.ProductId, Code = oi.Product != null ? oi.Product.Sku : "-", Name = oi.Product != null ? oi.Product.Name : "-" })
+        // Top 5 Products aggregated directly in SQL
+        var orderItemsQuery = context.SalesOrderItems
+            .AsNoTracking()
+            .Where(oi => oi.SalesOrder.CompanyId == companyId && oi.SalesOrder.Status != SalesOrderStatus.Cancelled);
+
+        if (request.StartDate.HasValue)
+        {
+            orderItemsQuery = orderItemsQuery.Where(oi => oi.SalesOrder.OrderDate >= request.StartDate.Value);
+        }
+
+        if (request.EndDate.HasValue)
+        {
+            orderItemsQuery = orderItemsQuery.Where(oi => oi.SalesOrder.OrderDate <= request.EndDate.Value);
+        }
+
+        var topProducts = await orderItemsQuery
+            .GroupBy(oi => new { oi.ProductId, Code = oi.Product.Sku, Name = oi.Product.Name })
             .Select(g => new TopProductDto(
                 g.Key.ProductId,
                 g.Key.Code,
@@ -72,14 +92,14 @@ public class GetSalesAnalyticsQueryHandler : IRequestHandler<GetSalesAnalyticsQu
             ))
             .OrderByDescending(p => p.TotalRevenue)
             .Take(5)
-            .ToList();
+            .ToListAsync(cancellationToken);
 
         var result = new SalesAnalyticsDto(
             totalInvoiced,
             totalCollected,
             totalOutstandingAr,
             totalOrders,
-            invoices.Count,
+            totalInvoices,
             topCustomers,
             topProducts
         );

@@ -23,7 +23,12 @@ public class DatabaseSeeder(
 
     public async Task SeedAsync()
     {
-        logger.LogInformation("Starting database seeding...");
+        logger.LogInformation("Starting database migration and seeding...");
+
+        if (context.Database.IsRelational())
+        {
+            await context.Database.MigrateAsync();
+        }
 
         await SeedMasterDataAsync();
         await SeedPermissionsAsync();
@@ -195,13 +200,33 @@ public class DatabaseSeeder(
             [
                 Permissions.Security.AuditView,
                 Permissions.Dashboard.ExecutiveView,
+                Permissions.Master.CompanyView,
+                Permissions.Master.DepartmentView,
+                Permissions.Master.ProductView,
+                Permissions.Master.CustomerView,
+                Permissions.Master.SupplierView,
+                Permissions.Sales.QuotationView,
+                Permissions.Sales.OrderView,
                 Permissions.Sales.OrderApprove,
+                Permissions.Sales.DeliveryView,
+                Permissions.Sales.InvoiceView,
+                Permissions.Procurement.PrView,
                 Permissions.Procurement.PrApprove,
+                Permissions.Procurement.PoView,
                 Permissions.Procurement.PoApprove,
+                Permissions.Procurement.GrnView,
+                Permissions.Procurement.BillView,
                 Permissions.Inventory.StockView,
                 Permissions.Inventory.AdjustmentApprove,
+                Permissions.Finance.CoaView,
+                Permissions.Finance.JournalView,
+                Permissions.Finance.PaymentView,
                 Permissions.Finance.PeriodClose,
+                Permissions.Hr.EmployeeView,
+                Permissions.Hr.AttendanceView,
+                Permissions.Hr.LeaveView,
                 Permissions.Hr.LeaveApprove,
+                Permissions.Hr.PayrollView,
                 Permissions.Hr.SelfServiceView,
                 Permissions.Reports.FinancialView,
                 Permissions.Reports.ExportData
@@ -209,20 +234,38 @@ public class DatabaseSeeder(
             [Roles.FinanceManager] =
             [
                 Permissions.Dashboard.ExecutiveView,
+                Permissions.Master.CompanyView,
+                Permissions.Master.ProductView,
+                Permissions.Master.CustomerView,
                 Permissions.Master.CustomerManage,
+                Permissions.Master.SupplierView,
                 Permissions.Master.SupplierManage,
+                Permissions.Sales.OrderView,
+                Permissions.Sales.InvoiceView,
+                Permissions.Sales.InvoiceIssue,
+                Permissions.Procurement.PrView,
                 Permissions.Procurement.PrCreate,
                 Permissions.Procurement.PrApprove,
+                Permissions.Procurement.PoView,
                 Permissions.Procurement.PoApprove,
+                Permissions.Procurement.GrnView,
+                Permissions.Procurement.BillView,
+                Permissions.Procurement.BillCreate,
+                Permissions.Procurement.BillPost,
                 Permissions.Procurement.BillVerify,
                 Permissions.Inventory.StockView,
                 Permissions.Inventory.AdjustmentApprove,
+                Permissions.Finance.CoaView,
                 Permissions.Finance.CoaManage,
+                Permissions.Finance.JournalView,
                 Permissions.Finance.JournalCreate,
                 Permissions.Finance.JournalPost,
+                Permissions.Finance.PaymentView,
                 Permissions.Finance.PaymentProcess,
                 Permissions.Finance.PeriodClose,
+                Permissions.Hr.LeaveView,
                 Permissions.Hr.LeaveApprove,
+                Permissions.Hr.PayrollView,
                 Permissions.Hr.PayrollProcess,
                 Permissions.Hr.SelfServiceView,
                 Permissions.Reports.FinancialView,
@@ -230,34 +273,64 @@ public class DatabaseSeeder(
             ],
             [Roles.FinanceStaff] =
             [
+                Permissions.Master.CustomerView,
+                Permissions.Master.SupplierView,
+                Permissions.Sales.OrderView,
+                Permissions.Sales.InvoiceView,
                 Permissions.Sales.InvoiceIssue,
+                Permissions.Procurement.PrView,
                 Permissions.Procurement.PrCreate,
+                Permissions.Procurement.PoView,
+                Permissions.Procurement.GrnView,
+                Permissions.Procurement.BillView,
+                Permissions.Procurement.BillCreate,
                 Permissions.Procurement.BillVerify,
                 Permissions.Inventory.StockView,
+                Permissions.Finance.CoaView,
+                Permissions.Finance.JournalView,
                 Permissions.Finance.JournalCreate,
+                Permissions.Finance.PaymentView,
                 Permissions.Finance.PaymentProcess,
                 Permissions.Hr.SelfServiceView,
+                Permissions.Reports.FinancialView,
                 Permissions.Reports.ExportData
             ],
             [Roles.SalesManager] =
             [
                 Permissions.Dashboard.ExecutiveView,
+                Permissions.Master.ProductView,
+                Permissions.Master.CustomerView,
                 Permissions.Master.CustomerManage,
+                Permissions.Sales.QuotationView,
                 Permissions.Sales.QuotationCreate,
+                Permissions.Sales.OrderView,
                 Permissions.Sales.OrderCreate,
                 Permissions.Sales.OrderApprove,
+                Permissions.Sales.DeliveryView,
+                Permissions.Sales.InvoiceView,
+                Permissions.Sales.InvoiceIssue,
+                Permissions.Procurement.PrView,
                 Permissions.Procurement.PrCreate,
                 Permissions.Procurement.PrApprove,
                 Permissions.Inventory.StockView,
+                Permissions.Hr.LeaveView,
                 Permissions.Hr.LeaveApprove,
                 Permissions.Hr.SelfServiceView,
+                Permissions.Reports.FinancialView,
                 Permissions.Reports.ExportData
             ],
             [Roles.SalesExecutive] =
             [
+                Permissions.Master.ProductView,
+                Permissions.Master.CustomerView,
                 Permissions.Master.CustomerManage,
+                Permissions.Sales.QuotationView,
                 Permissions.Sales.QuotationCreate,
+                Permissions.Sales.OrderView,
                 Permissions.Sales.OrderCreate,
+                Permissions.Sales.DeliveryView,
+                Permissions.Sales.InvoiceView,
+                Permissions.Procurement.PrView,
                 Permissions.Procurement.PrCreate,
                 Permissions.Inventory.StockView,
                 Permissions.Hr.SelfServiceView,
@@ -265,35 +338,58 @@ public class DatabaseSeeder(
             ],
             [Roles.ProcurementManager] =
             [
+                Permissions.Master.ProductView,
                 Permissions.Master.ProductManage,
+                Permissions.Master.SupplierView,
                 Permissions.Master.SupplierManage,
+                Permissions.Procurement.PrView,
                 Permissions.Procurement.PrCreate,
                 Permissions.Procurement.PrApprove,
+                Permissions.Procurement.PoView,
                 Permissions.Procurement.PoCreate,
                 Permissions.Procurement.PoApprove,
+                Permissions.Procurement.GrnView,
+                Permissions.Procurement.BillView,
                 Permissions.Inventory.StockView,
+                Permissions.Hr.LeaveView,
                 Permissions.Hr.LeaveApprove,
                 Permissions.Hr.SelfServiceView,
                 Permissions.Reports.ExportData
             ],
             [Roles.WarehouseManager] =
             [
+                Permissions.Master.ProductView,
                 Permissions.Master.ProductManage,
+                Permissions.Sales.OrderView,
+                Permissions.Sales.DeliveryView,
                 Permissions.Sales.DeliveryDispatch,
+                Permissions.Procurement.PrView,
                 Permissions.Procurement.PrCreate,
                 Permissions.Procurement.PrApprove,
+                Permissions.Procurement.PoView,
+                Permissions.Procurement.GrnView,
+                Permissions.Procurement.GrnCreate,
                 Permissions.Procurement.GrnReceive,
                 Permissions.Inventory.StockView,
                 Permissions.Inventory.TransferCreate,
                 Permissions.Inventory.AdjustmentApprove,
+                Permissions.Hr.LeaveView,
                 Permissions.Hr.LeaveApprove,
                 Permissions.Hr.SelfServiceView,
+                Permissions.Reports.FinancialView,
                 Permissions.Reports.ExportData
             ],
             [Roles.WarehouseStaff] =
             [
+                Permissions.Master.ProductView,
+                Permissions.Sales.OrderView,
+                Permissions.Sales.DeliveryView,
                 Permissions.Sales.DeliveryDispatch,
+                Permissions.Procurement.PrView,
                 Permissions.Procurement.PrCreate,
+                Permissions.Procurement.PoView,
+                Permissions.Procurement.GrnView,
+                Permissions.Procurement.GrnCreate,
                 Permissions.Procurement.GrnReceive,
                 Permissions.Inventory.StockView,
                 Permissions.Inventory.TransferCreate,
@@ -301,17 +397,27 @@ public class DatabaseSeeder(
             ],
             [Roles.HrManager] =
             [
+                Permissions.Master.CompanyView,
+                Permissions.Master.DepartmentView,
+                Permissions.Master.DepartmentManage,
+                Permissions.Procurement.PrView,
                 Permissions.Procurement.PrCreate,
                 Permissions.Procurement.PrApprove,
+                Permissions.Hr.EmployeeView,
                 Permissions.Hr.EmployeeManage,
+                Permissions.Hr.AttendanceView,
                 Permissions.Hr.AttendanceManage,
+                Permissions.Hr.LeaveView,
                 Permissions.Hr.LeaveApprove,
+                Permissions.Hr.PayrollView,
                 Permissions.Hr.PayrollProcess,
                 Permissions.Hr.SelfServiceView,
                 Permissions.Reports.ExportData
             ],
             [Roles.Employee] =
             [
+                Permissions.Hr.AttendanceView,
+                Permissions.Hr.LeaveView,
                 Permissions.Hr.SelfServiceView
             ]
         };
@@ -389,6 +495,16 @@ public class DatabaseSeeder(
                 logger.LogError("Failed to create admin user: {Errors}",
                     string.Join(", ", createResult.Errors.Select(e => e.Description)));
             }
+        }
+        else if (!await context.UserBranches.AnyAsync(ub => ub.UserId == adminUser.Id))
+        {
+            context.UserBranches.Add(new UserBranch
+            {
+                UserId = adminUser.Id,
+                BranchId = DefaultBranchId,
+                IsDefault = true
+            });
+            await context.SaveChangesAsync();
         }
     }
 

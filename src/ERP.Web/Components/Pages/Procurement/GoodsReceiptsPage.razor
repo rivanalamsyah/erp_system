@@ -270,8 +270,15 @@
                 PageNumber: _currentPage,
                 PageSize: _pageSize));
 
-            _receipts = result.Items.ToList();
-            _totalPages = (int)Math.Ceiling((double)result.TotalCount / _pageSize);
+            if (result.IsSuccess && result.Value != null)
+            {
+                _receipts = result.Value.Items.ToList();
+                _totalPages = Math.Max(1, (int)Math.Ceiling((double)result.Value.TotalCount / _pageSize));
+            }
+            else if (result.IsFailure)
+            {
+                Snackbar.Add(result.Error.Description, Severity.Error);
+            }
         }
         catch (Exception ex)
         {
@@ -366,18 +373,23 @@
             return;
         }
 
-        var company = await DbContext.Companies.FirstOrDefaultAsync();
-        var branch = await DbContext.Branches.FirstOrDefaultAsync();
+        var companyId = CurrentUser.CompanyId != Guid.Empty
+            ? CurrentUser.CompanyId
+            : (await DbContext.Companies.AsNoTracking().FirstOrDefaultAsync())?.Id ?? Guid.Empty;
 
-        if (company == null || branch == null)
+        var branchId = CurrentUser.BranchId != Guid.Empty
+            ? CurrentUser.BranchId
+            : (await DbContext.Branches.AsNoTracking().FirstOrDefaultAsync())?.Id ?? Guid.Empty;
+
+        if (companyId == Guid.Empty || branchId == Guid.Empty)
         {
             Snackbar.Add("Master Company / Branch belum terkonfigurasi.", Severity.Error);
             return;
         }
 
         var command = new CreateGoodsReceiptCommand(
-            CompanyId: company.Id,
-            BranchId: branch.Id,
+            CompanyId: companyId,
+            BranchId: branchId,
             WarehouseId: _formWarehouseId,
             PurchaseOrderId: _formPoId,
             DeliveryNoteNumber: _formDeliveryNoteNumber,
@@ -402,7 +414,7 @@
     {
         var confirm = await DialogService.ShowMessageBoxAsync(
             "Konfirmasi Penerimaan Fisik",
-            $"Konfirmasi penerimaan fisik GRN {grn.ReceiptNumber}? Stok barang akan otomatis masuk ke gudang '{grn.WarehouseName}' dan nilai rata-rata persediaan akan diperbarui.",
+            $"Konfirmasi penerimaan fisik GRN {grn.ReceiptNumber}? Stok barang akan otomatis masuk ke gudang '{grn.WarehouseName}' dan jurnal persediaan akan diposting.",
             yesText: "Terima & Update Stok",
             cancelText: "Batal");
 
@@ -421,4 +433,3 @@
         }
     }
 }
-

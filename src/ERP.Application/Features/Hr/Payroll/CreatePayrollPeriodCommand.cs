@@ -1,12 +1,15 @@
 using ERP.Application.Common.Interfaces;
+using ERP.Application.Common.Security;
 using ERP.Domain.Entities.Hr;
 using ERP.Shared;
+using ERP.Shared.Security;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Application.Features.Hr.Payroll;
 
+[RequirePermission(Permissions.Hr.PayrollProcess)]
 public record CreatePayrollPeriodCommand(
     Guid CompanyId,
     string PeriodName,

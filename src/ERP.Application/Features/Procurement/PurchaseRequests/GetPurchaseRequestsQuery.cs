@@ -1,10 +1,13 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using ERP.Application.Common.Interfaces;
+using ERP.Application.Common.Security;
 using ERP.Shared;
+using ERP.Shared.Security;
 
 namespace ERP.Application.Features.Procurement.PurchaseRequests;
 
+[RequirePermission(Permissions.Procurement.PrView)]
 public record GetPurchaseRequestsQuery(
     string? SearchTerm = null,
     int PageNumber = 1,

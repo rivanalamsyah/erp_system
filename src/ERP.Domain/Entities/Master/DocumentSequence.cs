@@ -9,6 +9,7 @@ public class DocumentSequence
     public int Year { get; private set; }
     public int Month { get; private set; }
     public int CurrentSequence { get; private set; }
+    public uint Version { get; set; }
 
     public Company Company { get; private set; } = default!;
     public Branch Branch { get; private set; } = default!;

@@ -109,7 +109,8 @@ public record DispatchDeliveryCommand(Guid Id) : IRequest<Result>;
 
 public class DispatchDeliveryCommandHandler(
     IApplicationDbContext context,
-    ICurrentUserService currentUserService)
+    ICurrentUserService currentUserService,
+    IAccountingPostingService accountingPostingService)
     : IRequestHandler<DispatchDeliveryCommand, Result>
 {
     public async Task<Result> Handle(
@@ -128,7 +129,19 @@ public class DispatchDeliveryCommandHandler(
         if (delivery.Status != DeliveryStatus.Draft)
             return Result.Failure(Error.Validation("DO.InvalidStatus", "Hanya Surat Jalan Draft yang dapat didispatch."));
 
+        var periodCheck = await accountingPostingService.EnsureFiscalPeriodOpenAsync(delivery.CompanyId, delivery.DeliveryDate, cancellationToken);
+        if (periodCheck.IsFailure)
+            return periodCheck;
+
         var userId = currentUserService.UserId ?? Guid.Empty;
+
+        // Batch load StockBalances in a single query (eliminates N+1 inside loop)
+        var productIds = delivery.Items.Select(i => i.ProductId).Distinct().ToList();
+        var stockBalances = await context.StockBalances
+            .Where(b => b.WarehouseId == delivery.WarehouseId && productIds.Contains(b.ProductId))
+            .ToDictionaryAsync(b => b.ProductId, cancellationToken);
+
+        decimal totalCogsAmount = 0m;
 
         foreach (var item in delivery.Items)
         {
@@ -136,10 +149,7 @@ public class DispatchDeliveryCommandHandler(
             delivery.SalesOrder.RecordShipment(item.SoItemId, item.QuantityShipped);
 
             // Deduct stock balance from warehouse (BR-INV-001 anti-negative stock enforced in DeductStock)
-            var stock = await context.StockBalances
-                .FirstOrDefaultAsync(b => b.WarehouseId == delivery.WarehouseId && b.ProductId == item.ProductId, cancellationToken);
-
-            if (stock == null)
+            if (!stockBalances.TryGetValue(item.ProductId, out var stock))
             {
                 return Result.Failure(Error.Validation(
                     "BR-INV-001",
@@ -151,6 +161,9 @@ public class DispatchDeliveryCommandHandler(
             {
                 stock.ReleaseReservation(Math.Min(item.QuantityShipped, stock.ReservedQuantity));
             }
+
+            var unitCost = stock.AverageCost;
+            totalCogsAmount += Math.Round(item.QuantityShipped * unitCost, 2);
 
             // Deduct physical inventory
             stock.DeductStock(item.QuantityShipped);
@@ -164,7 +177,7 @@ public class DispatchDeliveryCommandHandler(
                 movementType: MovementType.SalesDelivery,
                 quantity: item.QuantityShipped,
                 direction: "OUT",
-                unitCost: stock.AverageCost,
+                unitCost: unitCost,
                 referenceNumber: delivery.DeliveryNumber,
                 createdByUserId: userId);
 
@@ -172,9 +185,13 @@ public class DispatchDeliveryCommandHandler(
         }
 
         delivery.Dispatch(userId);
+
+        var glResult = await accountingPostingService.PostDeliveryCogsJournalAsync(delivery, totalCogsAmount, userId, cancellationToken);
+        if (glResult.IsFailure)
+            return Result.Failure(glResult.Error);
+
         await context.SaveChangesAsync(cancellationToken);
 
         return Result.Success();
     }
 }
-

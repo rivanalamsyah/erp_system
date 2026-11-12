@@ -1,4 +1,7 @@
+using System.Reflection;
+using ERP.Application.Common.Security;
 using FluentAssertions;
+using MediatR;
 using NetArchTest.Rules;
 using Xunit;
 
@@ -68,7 +71,7 @@ public class CleanArchitectureTests
         // Act
         var result = Types.InAssembly(applicationAssembly)
             .That()
-            .ImplementInterface(typeof(MediatR.IRequestHandler<,>))
+            .ImplementInterface(typeof(IRequestHandler<,>))
             .Should()
             .HaveNameEndingWith("Handler")
             .GetResult();
@@ -76,5 +79,27 @@ public class CleanArchitectureTests
         // Assert
         result.IsSuccessful.Should().BeTrue("All MediatR request handlers must follow naming convention '*Handler'.");
     }
-}
 
+    [Fact]
+    public void All_MediatR_Requests_In_Application_Should_Have_RequirePermissionAttribute()
+    {
+        // Arrange
+        var applicationAssembly = typeof(ERP.Application.DependencyInjection).Assembly;
+
+        var requestTypes = applicationAssembly.GetTypes()
+            .Where(t => t is { IsClass: true, IsAbstract: false } &&
+                        t.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IRequest<>)))
+            .ToList();
+
+        // Act
+        var unprotectedRequests = requestTypes
+            .Where(t => !t.GetCustomAttributes<RequirePermissionAttribute>(inherit: true).Any())
+            .Select(t => t.FullName)
+            .ToList();
+
+        // Assert
+        requestTypes.Should().NotBeEmpty();
+        unprotectedRequests.Should().BeEmpty(
+            "Every MediatR Command and Query in ERP.Application must be protected by at least one [RequirePermission] attribute.");
+    }
+}

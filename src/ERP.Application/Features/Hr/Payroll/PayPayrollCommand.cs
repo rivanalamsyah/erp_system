@@ -1,25 +1,25 @@
 using ERP.Application.Common.Interfaces;
+using ERP.Application.Common.Security;
 using ERP.Domain.Entities.Hr;
 using ERP.Shared;
+using ERP.Shared.Security;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Application.Features.Hr.Payroll;
 
+[RequirePermission(Permissions.Hr.PayrollProcess)]
 public record PayPayrollCommand(Guid PeriodId) : IRequest<Result<Unit>>;
 
-public class PayPayrollCommandHandler : IRequestHandler<PayPayrollCommand, Result<Unit>>
+public class PayPayrollCommandHandler(
+    IApplicationDbContext context,
+    ICurrentUserService currentUserService,
+    IAccountingPostingService accountingPostingService)
+    : IRequestHandler<PayPayrollCommand, Result<Unit>>
 {
-    private readonly IApplicationDbContext _context;
-
-    public PayPayrollCommandHandler(IApplicationDbContext context)
-    {
-        _context = context;
-    }
-
     public async Task<Result<Unit>> Handle(PayPayrollCommand request, CancellationToken cancellationToken)
     {
-        var period = await _context.PayrollPeriods
+        var period = await context.PayrollPeriods
             .Include(p => p.Items)
             .FirstOrDefaultAsync(p => p.Id == request.PeriodId, cancellationToken);
 
@@ -33,8 +33,27 @@ public class PayPayrollCommandHandler : IRequestHandler<PayPayrollCommand, Resul
             return Result<Unit>.Failure(Error.Validation("Payroll.NotApproved", "Hanya periode penggajian yang berstatus Approved yang dapat dibayarkan."));
         }
 
+        var periodCheck = await accountingPostingService.EnsureFiscalPeriodOpenAsync(period.CompanyId, period.EndDate, cancellationToken);
+        if (periodCheck.IsFailure)
+        {
+            return Result<Unit>.Failure(periodCheck.Error);
+        }
+
+        var userId = currentUserService.UserId ?? Guid.Empty;
         period.MarkPaid();
-        await _context.SaveChangesAsync(cancellationToken);
+
+        var glResult = await accountingPostingService.PostPayrollJournalAsync(
+            period,
+            currentUserService.BranchId,
+            userId,
+            cancellationToken);
+
+        if (glResult.IsFailure)
+        {
+            return Result<Unit>.Failure(glResult.Error);
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
 
         return Result<Unit>.Success(Unit.Value);
     }

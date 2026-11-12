@@ -1,17 +1,35 @@
+@inject NavigationManager Navigation
+
 <Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
     <Found Context="routeData">
         <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
             <NotAuthorized>
-                <div class="d-flex flex-column align-center justify-center pa-12" style="min-height: 50vh;">
-                    <MudIcon Icon="@Icons.Material.Filled.GppBad" Color="Color.Error" Size="Size.Large" Style="font-size: 4rem;" Class="mb-4" />
-                    <MudText Typo="Typo.h5" GutterBottom="true" Style="font-weight: 700;">Akses Tidak Diizinkan</MudText>
-                    <MudText Typo="Typo.body2" Class="mb-6 text-center" Style="color: #64748B; max-width: 480px;">
-                        Akun Anda tidak memiliki izin operasi (Permission) yang sesuai untuk mengakses modul ini. Silakan hubungi Administrator jika ini merupakan sebuah kesalahan.
-                    </MudText>
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/">
-                        Kembali ke Dashboard
-                    </MudButton>
-                </div>
+                @if (context.User.Identity?.IsAuthenticated != true)
+                {
+                    <div class="d-flex flex-column align-center justify-center pa-12" style="min-height: 50vh;">
+                        <MudIcon Icon="@Icons.Material.Filled.LockPerson" Color="Color.Primary" Size="Size.Large" Style="font-size: 4rem;" Class="mb-4" />
+                        <MudText Typo="Typo.h5" GutterBottom="true" Style="font-weight: 700;">Sesi Otentikasi Diperlukan</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-6 text-center" Style="color: #64748B; max-width: 480px;">
+                            Silakan masuk menggunakan akun korporat Anda untuk mengakses sistem Enterprise ERP.
+                        </MudText>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/login">
+                            Masuk ke Sistem (Login)
+                        </MudButton>
+                    </div>
+                }
+                else
+                {
+                    <div class="d-flex flex-column align-center justify-center pa-12" style="min-height: 50vh;">
+                        <MudIcon Icon="@Icons.Material.Filled.GppBad" Color="Color.Error" Size="Size.Large" Style="font-size: 4rem;" Class="mb-4" />
+                        <MudText Typo="Typo.h5" GutterBottom="true" Style="font-weight: 700;">Akses Tidak Diizinkan</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-6 text-center" Style="color: #64748B; max-width: 480px;">
+                            Akun Anda tidak memiliki izin operasi (Permission) yang sesuai untuk mengakses modul ini. Silakan hubungi Administrator jika ini merupakan sebuah kesalahan.
+                        </MudText>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/">
+                            Kembali ke Dashboard
+                        </MudButton>
+                    </div>
+                }
             </NotAuthorized>
             <Authorizing>
                 <div class="d-flex flex-column align-center justify-center pa-12" style="min-height: 50vh;">

@@ -1,11 +1,14 @@
 using ERP.Application.Common.Interfaces;
+using ERP.Application.Common.Security;
 using ERP.Domain.Entities.Hr;
 using ERP.Shared;
+using ERP.Shared.Security;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Application.Features.Hr.Leaves;
 
+[RequirePermission(Permissions.Hr.LeaveApprove)]
 public record ApproveLeaveRequestCommand(Guid LeaveRequestId, bool Approve) : IRequest<Result<Unit>>;
 
 public class ApproveLeaveRequestCommandHandler : IRequestHandler<ApproveLeaveRequestCommand, Result<Unit>>

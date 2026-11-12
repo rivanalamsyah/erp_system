@@ -1,10 +1,13 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using ERP.Application.Common.Interfaces;
+using ERP.Application.Common.Security;
 using ERP.Shared;
+using ERP.Shared.Security;
 
 namespace ERP.Application.Features.Inventory.StockBalances;
 
+[RequirePermission(Permissions.Inventory.StockView)]
 public record GetStockBalancesQuery(
     Guid? WarehouseId = null,
     string? SearchTerm = null,
@@ -66,6 +69,7 @@ public class GetStockBalancesQueryHandler(IApplicationDbContext context)
     }
 }
 
+[RequirePermission(Permissions.Inventory.StockView)]
 public record GetStockCardQuery(
     Guid WarehouseId,
     Guid ProductId,

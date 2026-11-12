@@ -109,7 +109,8 @@ public record ReceiveGoodsReceiptCommand(Guid Id) : IRequest<Result>;
 
 public class ReceiveGoodsReceiptCommandHandler(
     IApplicationDbContext context,
-    ICurrentUserService currentUserService)
+    ICurrentUserService currentUserService,
+    IAccountingPostingService accountingPostingService)
     : IRequestHandler<ReceiveGoodsReceiptCommand, Result>
 {
     public async Task<Result> Handle(
@@ -128,7 +129,19 @@ public class ReceiveGoodsReceiptCommandHandler(
         if (grn.Status != GoodsReceiptStatus.Draft)
             return Result.Failure(Error.Validation("GRN.InvalidStatus", "Hanya GRN dengan status Draft yang dapat diproses penerimaannya."));
 
+        var periodCheck = await accountingPostingService.EnsureFiscalPeriodOpenAsync(grn.CompanyId, grn.ReceiptDate, cancellationToken);
+        if (periodCheck.IsFailure)
+            return periodCheck;
+
         var userId = currentUserService.UserId ?? Guid.Empty;
+
+        // Batch load StockBalances in a single query (eliminates N+1 inside loop)
+        var productIds = grn.Items.Select(i => i.ProductId).Distinct().ToList();
+        var stockBalances = await context.StockBalances
+            .Where(b => b.WarehouseId == grn.WarehouseId && productIds.Contains(b.ProductId))
+            .ToDictionaryAsync(b => b.ProductId, cancellationToken);
+
+        decimal totalReceiptValue = 0m;
 
         // Process stock inbound and update PO received quantity
         foreach (var grnItem in grn.Items)
@@ -136,17 +149,18 @@ public class ReceiveGoodsReceiptCommandHandler(
             var poItem = grn.PurchaseOrder.Items.First(p => p.Id == grnItem.PoItemId);
             grn.PurchaseOrder.RecordReceipt(grnItem.PoItemId, grnItem.QuantityReceived);
 
-            var stockBalance = await context.StockBalances
-                .FirstOrDefaultAsync(b => b.WarehouseId == grn.WarehouseId && b.ProductId == grnItem.ProductId, cancellationToken);
-
-            if (stockBalance == null)
+            if (!stockBalances.TryGetValue(grnItem.ProductId, out var stockBalance))
             {
                 stockBalance = StockBalance.Create(grn.CompanyId, grn.WarehouseId, grnItem.ProductId);
                 context.StockBalances.Add(stockBalance);
+                stockBalances[grnItem.ProductId] = stockBalance;
             }
 
+            var effectiveUnitCost = Math.Round(poItem.UnitPrice * (1 - (poItem.DiscountRate / 100m)), 4);
+            totalReceiptValue += Math.Round(grnItem.QuantityReceived * effectiveUnitCost, 2);
+
             // Recalculate moving average cost and physical stock
-            stockBalance.AddStock(grnItem.QuantityReceived, poItem.UnitPrice);
+            stockBalance.AddStock(grnItem.QuantityReceived, effectiveUnitCost);
 
             // Create perpetual stock movement ledger entry
             var movement = StockMovement.Create(
@@ -157,7 +171,7 @@ public class ReceiveGoodsReceiptCommandHandler(
                 movementType: MovementType.PurchaseReceipt,
                 quantity: grnItem.QuantityReceived,
                 direction: "IN",
-                unitCost: poItem.UnitPrice,
+                unitCost: effectiveUnitCost,
                 referenceNumber: grn.ReceiptNumber,
                 createdByUserId: userId);
 
@@ -165,6 +179,11 @@ public class ReceiveGoodsReceiptCommandHandler(
         }
 
         grn.MarkReceived(userId);
+
+        var glResult = await accountingPostingService.PostGoodsReceiptJournalAsync(grn, totalReceiptValue, userId, cancellationToken);
+        if (glResult.IsFailure)
+            return Result.Failure(glResult.Error);
+
         await context.SaveChangesAsync(cancellationToken);
 
         return Result.Success();

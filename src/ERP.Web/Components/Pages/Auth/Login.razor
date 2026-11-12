@@ -2,6 +2,7 @@
 @attribute [AllowAnonymous]
 @layout AuthLayout
 @inject NavigationManager Navigation
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment Env
 
 <PageTitle>Login — Enterprise ERP</PageTitle>
 
@@ -34,7 +35,7 @@
                         <label for="email" style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">
                             Email Korporat
                         </label>
-                        <input id="email" name="email" type="email" required placeholder="admin@enterprise.erp"
+                        <input id="email" name="email" type="email" required placeholder="nama@perusahaan.co.id"
                                style="width: 100%; padding: 10px 12px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.9rem;" />
                     </div>
 
@@ -62,11 +63,14 @@
                 </MudStack>
             </form>
 
-            <div class="mt-6 pt-4 text-center border-t border-slate-200">
-                <MudText Typo="Typo.caption" Style="color: #94A3B8;">
-                    Kredensial Bawaan: <b>admin@enterprise.erp</b> / <b>Admin@12345</b>
-                </MudText>
-            </div>
+            @if (Env.IsDevelopment())
+            {
+                <div class="mt-6 pt-4 text-center border-t border-slate-200">
+                    <MudText Typo="Typo.caption" Style="color: #94A3B8;">
+                        [Dev Mode] Kredensial Awal: <b>admin@enterprise.erp</b> / <b>Admin@12345</b>
+                    </MudText>
+                </div>
+            }
         </MudCard>
     </MudContainer>
 </div>
@@ -82,4 +86,3 @@
         _ => null
     };
 }
-

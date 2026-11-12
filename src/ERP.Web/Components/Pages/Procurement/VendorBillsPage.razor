@@ -198,8 +198,15 @@
                 PageNumber: _currentPage,
                 PageSize: _pageSize));
 
-            _bills = result.Items.ToList();
-            _totalPages = (int)Math.Ceiling((double)result.TotalCount / _pageSize);
+            if (result.IsSuccess && result.Value != null)
+            {
+                _bills = result.Value.Items.ToList();
+                _totalPages = Math.Max(1, (int)Math.Ceiling((double)result.Value.TotalCount / _pageSize));
+            }
+            else if (result.IsFailure)
+            {
+                Snackbar.Add(result.Error.Description, Severity.Error);
+            }
         }
         catch (Exception ex)
         {
@@ -251,18 +258,23 @@
             return;
         }
 
-        var company = await DbContext.Companies.FirstOrDefaultAsync();
-        var branch = await DbContext.Branches.FirstOrDefaultAsync();
+        var companyId = CurrentUser.CompanyId != Guid.Empty
+            ? CurrentUser.CompanyId
+            : (await DbContext.Companies.AsNoTracking().FirstOrDefaultAsync())?.Id ?? Guid.Empty;
 
-        if (company == null || branch == null)
+        var branchId = CurrentUser.BranchId != Guid.Empty
+            ? CurrentUser.BranchId
+            : (await DbContext.Branches.AsNoTracking().FirstOrDefaultAsync())?.Id ?? Guid.Empty;
+
+        if (companyId == Guid.Empty || branchId == Guid.Empty)
         {
             Snackbar.Add("Master Company / Branch belum terkonfigurasi.", Severity.Error);
             return;
         }
 
         var command = new CreateVendorBillCommand(
-            CompanyId: company.Id,
-            BranchId: branch.Id,
+            CompanyId: companyId,
+            BranchId: branchId,
             PurchaseOrderId: _formPoId,
             VendorInvoiceNumber: _formVendorInvoiceNumber,
             BillDate: DateOnly.FromDateTime(_formBillDate ?? DateTime.Today),
@@ -295,7 +307,7 @@
             var result = await Mediator.Send(new PostVendorBillCommand(bill.Id));
             if (result.IsSuccess)
             {
-                Snackbar.Add($"Tagihan {bill.BillNumber} berhasil diposting.", Severity.Success);
+                Snackbar.Add($"Tagihan {bill.BillNumber} berhasil diposting ke buku besar AP.", Severity.Success);
                 await LoadData();
             }
             else
@@ -315,4 +327,3 @@
         _ => Color.Default
     };
 }
-

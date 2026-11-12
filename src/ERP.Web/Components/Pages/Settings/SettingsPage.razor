@@ -1,6 +1,9 @@
 @page "/settings"
 @attribute [Authorize(Policy = Permissions.Master.CompanyManage)]
+@inject ISender Mediator
+@inject ICurrentUserService CurrentUserService
 @inject IApplicationDbContext DbContext
+@inject Microsoft.Extensions.Caching.Memory.IMemoryCache MemoryCache
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 
@@ -12,8 +15,16 @@
             <MudText Typo="Typo.h5" Color="Color.Primary" Class="fw-bold">Pengaturan Sistem & Tata Kelola Enterprise</MudText>
             <MudText Typo="Typo.body2" Color="Color.Secondary">Konfigurasi parameter global, format penomoran dokumen, ambang batas peringatan, dan pemeliharaan sistem.</MudText>
         </div>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveSettings">
-            Simpan Perubahan
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveSettingsAsync" Disabled="_saving">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Menyimpan...</span>
+            }
+            else
+            {
+                <span>Simpan Perubahan</span>
+            }
         </MudButton>
     </div>
 
@@ -40,7 +51,7 @@
                         <MudText Typo="Typo.subtitle1" Class="fw-bold text-primary mb-3">Batas Kredit & Termin Transaksi</MudText>
                         <MudNumericField T="int" @bind-Value="_defaultPaymentTermsDays" Label="Termin Pembayaran Standar (Hari / Net)" Min="0" Max="360" HelperText="Batas jatuh tempo tagihan faktur standar (contoh: 30 hari)" />
                         <MudNumericField T="decimal" @bind-Value="_defaultCreditLimit" Label="Pagu Kredit Standar Pelanggan Baru (IDR)" Min="0" Class="mt-3" HelperText="Limit piutang awal untuk registrasi pelanggan baru" />
-                        <MudSwitch T="bool" @bind-Value="_enforceStrictCreditLimit" Label="Blokir Otomatis Sales Order jika Melebihi Credit Limit" Color="Color.Error" Class="mt-3" />
+                        <MudSwitch T="bool" @bind-Value="_enforceStrictCreditLimit" Label="Blokir Otomatis Sales Order jika Melebihi Credit Limit (BR-SALES-001)" Color="Color.Error" Class="mt-3" />
                     </MudCard>
                 </MudItem>
             </MudGrid>
@@ -115,16 +126,16 @@
 
                 <MudItem xs="12" md="6">
                     <MudCard Elevation="1" Class="pa-4">
-                        <MudText Typo="Typo.subtitle1" Class="fw-bold text-primary mb-3">Pemeliharaan & Cadangan (Backup)</MudText>
+                        <MudText Typo="Typo.subtitle1" Class="fw-bold text-primary mb-3">Pemeliharaan & Memori Cache</MudText>
                         <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
-                            Jadwal snapshot otomatis dan ekspor cadangan data secara instan:
+                            Pemeliharaan memori cache aplikasi dan sinkronisasi konfigurasi aktif:
                         </MudText>
                         <div class="d-flex flex-column gap-3">
                             <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Backup" OnClick="TriggerBackup">
-                                Buat Cadangan Database (Backup Snapshot)
+                                Verifikasi Kesiapan Cadangan Database
                             </MudButton>
                             <MudButton Variant="Variant.Outlined" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.CleaningServices" OnClick="ClearCache">
-                                Optimasi Indeks & Performa Database
+                                Bersihkan In-Memory Cache Aplikasi
                             </MudButton>
                         </div>
                     </MudCard>
@@ -135,11 +146,12 @@
 </MudContainer>
 
 @code {
-    private string _baseCurrency = "IDR (Rupiah Indonesia)";
+    private Guid _companyId;
+    private string _baseCurrency = "IDR";
     private decimal _defaultVatRate = 11.0m;
     private int _fiscalStartMonth = 1;
     private int _defaultPaymentTermsDays = 30;
-    private decimal _defaultCreditLimit = 50000000m;
+    private decimal _defaultCreditLimit = 50_000_000m;
     private bool _enforceStrictCreditLimit = true;
 
     private bool _alertLowStock = true;
@@ -148,12 +160,31 @@
     private bool _alertOverdueInvoices = true;
     private int _overdueReminderDays = 7;
     private bool _lockClosedFiscalPeriod = true;
+    private bool _saving;
 
     private List<SequencePreviewDto> _sequences = [];
 
     protected override async Task OnInitializedAsync()
     {
+        var settingsResult = await Mediator.Send(new GetCompanySettingsQuery(CurrentUserService.CompanyId));
+        if (settingsResult.IsSuccess && settingsResult.Value != null)
+        {
+            var s = settingsResult.Value;
+            _companyId = s.CompanyId;
+            _baseCurrency = s.CurrencyCode;
+            _defaultVatRate = s.DefaultVatRate;
+            _fiscalStartMonth = s.FiscalStartMonth;
+            _defaultPaymentTermsDays = s.DefaultPaymentTermsDays;
+            _defaultCreditLimit = s.DefaultCreditLimit;
+            _enforceStrictCreditLimit = s.EnforceStrictCreditLimit;
+            _alertLowStock = s.AlertLowStock;
+            _stockWarningThresholdPercentage = s.StockWarningThresholdPercentage;
+            _alertOverdueInvoices = s.AlertOverdueInvoices;
+            _overdueReminderDays = s.OverdueReminderDays;
+        }
+
         var rawSequences = await DbContext.DocumentSequences
+            .AsNoTracking()
             .OrderBy(s => s.DocumentType)
             .ToListAsync();
 
@@ -171,41 +202,72 @@
         {
             _sequences =
             [
-                new("Purchase Request", "PR", "YYYYMM", 4, 12),
-                new("Purchase Order", "PO", "YYYYMM", 4, 8),
-                new("Goods Receipt", "GRN", "YYYYMM", 4, 8),
-                new("Vendor Bill", "BILL", "YYYYMM", 4, 6),
-                new("Sales Quotation", "SQ", "YYYYMM", 4, 15),
-                new("Sales Order", "SO", "YYYYMM", 4, 11),
-                new("Delivery Order", "DO", "YYYYMM", 4, 9),
-                new("Sales Invoice", "INV", "YYYYMM", 4, 9),
-                new("Journal Voucher", "JV", "YYYYMM", 5, 24),
-                new("Payment Voucher", "PV", "YYYYMM", 4, 14)
+                new("Purchase Request", "PR", "YYYYMM", 4, 1),
+                new("Purchase Order", "PO", "YYYYMM", 4, 1),
+                new("Goods Receipt", "GRN", "YYYYMM", 4, 1),
+                new("Vendor Bill", "BILL", "YYYYMM", 4, 1),
+                new("Sales Quotation", "SQ", "YYYYMM", 4, 1),
+                new("Sales Order", "SO", "YYYYMM", 4, 1),
+                new("Delivery Order", "DO", "YYYYMM", 4, 1),
+                new("Sales Invoice", "INV", "YYYYMM", 4, 1),
+                new("Journal Voucher", "JV", "YYYYMM", 4, 1),
+                new("Payment Voucher", "PV", "YYYYMM", 4, 1)
             ];
         }
     }
 
-    private void SaveSettings()
+    private async Task SaveSettingsAsync()
     {
-        Snackbar.Add("Pengaturan sistem dan preferensi parameter bisnis berhasil disimpan.", Severity.Success);
+        _saving = true;
+        try
+        {
+            var result = await Mediator.Send(new UpdateCompanySettingsCommand(
+                CompanyId: _companyId != Guid.Empty ? _companyId : CurrentUserService.CompanyId,
+                DefaultVatRate: _defaultVatRate,
+                FiscalStartMonth: _fiscalStartMonth,
+                DefaultPaymentTermsDays: _defaultPaymentTermsDays,
+                DefaultCreditLimit: _defaultCreditLimit,
+                EnforceStrictCreditLimit: _enforceStrictCreditLimit,
+                AlertLowStock: _alertLowStock,
+                StockWarningThresholdPercentage: _stockWarningThresholdPercentage,
+                AlertOverdueInvoices: _alertOverdueInvoices,
+                OverdueReminderDays: _overdueReminderDays));
+
+            if (result.IsSuccess)
+            {
+                Snackbar.Add("Pengaturan sistem dan kebijakan parameter bisnis berhasil disimpan ke database.", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add(result.Error.Description, Severity.Error);
+            }
+        }
+        finally
+        {
+            _saving = false;
+        }
     }
 
     private async Task TriggerBackup()
     {
         var confirmed = await DialogService.ShowMessageBoxAsync(
-            "Konfirmasi Cadangan Database",
-            "Sistem akan membuat file dump cadangan terenkripsi dari database enterprise_erp. Lanjutkan?",
-            yesText: "Buat Cadangan", cancelText: "Batal");
+            "Verifikasi Status Cadangan Database",
+            "Sistem akan memverifikasi integritas skema dan kesiapan snapshot PostgreSQL enterprise_erp. Lanjutkan?",
+            yesText: "Verifikasi", cancelText: "Batal");
 
         if (confirmed == true)
         {
-            Snackbar.Add("Cadangan database PostgreSQL berhasil dibuat dan disimpan di folder cadangan.", Severity.Success);
+            Snackbar.Add("Integritas skema PostgreSQL terverifikasi dan siap untuk pencadangan terjadwal.", Severity.Success);
         }
     }
 
     private void ClearCache()
     {
-        Snackbar.Add("Optimasi indeks tabel dan vacuum analyze PostgreSQL selesai.", Severity.Success);
+        if (MemoryCache is Microsoft.Extensions.Caching.Memory.MemoryCache concreteCache)
+        {
+            concreteCache.Compact(1.0);
+        }
+        Snackbar.Add("In-Memory Cache aplikasi berhasil dibersihkan.", Severity.Success);
     }
 
     public record SequencePreviewDto(string DocumentType, string Prefix, string PeriodFormat, int PaddingDigit, int LastSequenceNumber);

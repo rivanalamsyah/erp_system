@@ -89,7 +89,8 @@ public record PostPaymentCommand(Guid Id) : IRequest<Result>;
 
 public class PostPaymentCommandHandler(
     IApplicationDbContext context,
-    ICurrentUserService currentUserService)
+    ICurrentUserService currentUserService,
+    IAccountingPostingService accountingPostingService)
     : IRequestHandler<PostPaymentCommand, Result>
 {
     public async Task<Result> Handle(
@@ -106,15 +107,22 @@ public class PostPaymentCommandHandler(
         if (payment.Status != PaymentStatus.Draft)
             return Result.Failure(Error.Validation("Payment.InvalidStatus", "Hanya pembayaran Draft yang dapat diposting."));
 
-        // BR-ACC-003: Batas Alokasi Pembayaran
+        var periodCheck = await accountingPostingService.EnsureFiscalPeriodOpenAsync(payment.CompanyId, payment.PaymentDate, cancellationToken);
+        if (periodCheck.IsFailure)
+            return periodCheck;
+
+        var invoiceIds = payment.Allocations.Select(a => a.InvoiceId).Distinct().ToList();
+
+        // BR-ACC-003: Batas Alokasi Pembayaran (batch loaded to eliminate N+1 inside loop)
         if (payment.PaymentType == PaymentType.CustomerReceipt)
         {
+            var invoices = await context.SalesInvoices
+                .Where(i => invoiceIds.Contains(i.Id))
+                .ToDictionaryAsync(i => i.Id, cancellationToken);
+
             foreach (var alloc in payment.Allocations)
             {
-                var invoice = await context.SalesInvoices
-                    .FirstOrDefaultAsync(i => i.Id == alloc.InvoiceId, cancellationToken);
-
-                if (invoice == null)
+                if (!invoices.TryGetValue(alloc.InvoiceId, out var invoice))
                     return Result.Failure(Error.NotFound("Invoice.NotFound", $"Faktur {alloc.InvoiceId} tidak ditemukan."));
 
                 if (alloc.AllocatedAmount > invoice.RemainingAmount)
@@ -129,12 +137,13 @@ public class PostPaymentCommandHandler(
         }
         else // VendorPayment
         {
+            var bills = await context.VendorBills
+                .Where(b => invoiceIds.Contains(b.Id))
+                .ToDictionaryAsync(b => b.Id, cancellationToken);
+
             foreach (var alloc in payment.Allocations)
             {
-                var bill = await context.VendorBills
-                    .FirstOrDefaultAsync(b => b.Id == alloc.InvoiceId, cancellationToken);
-
-                if (bill == null)
+                if (!bills.TryGetValue(alloc.InvoiceId, out var bill))
                     return Result.Failure(Error.NotFound("Bill.NotFound", $"Tagihan vendor {alloc.InvoiceId} tidak ditemukan."));
 
                 if (alloc.AllocatedAmount > bill.RemainingAmount)
@@ -148,10 +157,15 @@ public class PostPaymentCommandHandler(
             }
         }
 
-        payment.Post(currentUserService.UserId ?? Guid.Empty);
+        var userId = currentUserService.UserId ?? Guid.Empty;
+        payment.Post(userId);
+
+        var glResult = await accountingPostingService.PostPaymentJournalAsync(payment, userId, cancellationToken);
+        if (glResult.IsFailure)
+            return Result.Failure(glResult.Error);
+
         await context.SaveChangesAsync(cancellationToken);
 
         return Result.Success();
     }
 }
-
